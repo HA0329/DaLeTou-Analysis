@@ -62,10 +62,13 @@ function toCompact(list) {
     if (nums.length !== 7) throw new Error('期号 ' + it.lotteryDrawNum + ' 开奖号码异常：' + it.lotteryDrawResult);
     const pool = Number(String(it.poolBalanceAfterdraw || '0').replace(/,/g, '')) || 0; // 当期开奖后奖池，供中奖查询判定固定奖升级档
     const sales = Number(String(it.totalSaleAmount || '').replace(/,/g, '')) || 0;       // 本期销量（早期数据可能为空）
+    // 官网对"无人中奖"的奖级返回占位符（stakeAmountFormat:"-1"、stakeAmount:"---"），
+    // 负数/NaN 统一归一为 0（0 注即 0 元，与官方语义一致，且能通过 server.js 校验）
+    const toNum = (v) => { const n = Number(String(v || '').replace(/,/g, '')); return Number.isFinite(n) && n > 0 ? n : 0; };
     const prizes = (it.prizeLevelList || []).map((p) => [                                 // 开奖公告：各奖级中奖注数与单注奖金
       String(p.prizeLevel || ''),
-      Number(String(p.stakeCount || '0').replace(/,/g, '')) || 0,
-      Number(String(p.stakeAmountFormat || p.stakeAmount || '0').replace(/,/g, '')) || 0
+      toNum(p.stakeCount),
+      toNum(p.stakeAmountFormat) || toNum(p.stakeAmount)
     ]).filter((p) => p[0]);
     return [it.lotteryDrawNum, it.lotteryDrawTime, nums.slice(0, 5), nums.slice(5, 7), pool, sales, prizes];
   });
