@@ -22,6 +22,50 @@
 - 🗂️ **历史开奖记录**（最新在前，可搜索翻页）
 - 🔄 **在线更新**：一键抓取体彩官网最新开奖数据，自动缓存到浏览器 localStorage
 
+## 📸 界面截图
+
+以下截图均为实际运行效果（内置数据 · 2911 期，最新一期 26093 期 · 2026-08-17）：
+
+<p align="center">
+  <img src="screenshots/01-hero.png" alt="首页" width="48%">
+  <img src="screenshots/02-overview.png" alt="概览数据卡片" width="48%">
+</p>
+
+<p align="center">
+  <img src="screenshots/03-rules.png" alt="玩法规则（2026 新规）" width="48%">
+  <img src="screenshots/04-check.png" alt="中奖查询（含判定结果）" width="48%">
+</p>
+
+<p align="center">
+  <img src="screenshots/05-latest.png" alt="最新一期开奖" width="48%">
+  <img src="screenshots/06-pooltrend.png" alt="奖池走势" width="48%">
+</p>
+
+<p align="center">
+  <img src="screenshots/07-trend.png" alt="号码走势图" width="48%">
+  <img src="screenshots/08-freq.png" alt="号码出现频率" width="48%">
+</p>
+
+<p align="center">
+  <img src="screenshots/09-sum.png" alt="前区和值走势" width="48%">
+  <img src="screenshots/10-dist.png" alt="结构分布" width="48%">
+</p>
+
+<p align="center">
+  <img src="screenshots/11-omit.png" alt="遗漏分析" width="48%">
+  <img src="screenshots/12-matrix.png" alt="号码热度矩阵" width="48%">
+</p>
+
+<p align="center">
+  <img src="screenshots/13-combo.png" alt="高频组合与连号" width="48%">
+  <img src="screenshots/14-pick.png" alt="模拟选号" width="48%">
+</p>
+
+<p align="center">
+  <img src="screenshots/15-predict.png" alt="下一期号码预测" width="48%">
+  <img src="screenshots/16-records.png" alt="历史开奖记录" width="48%">
+</p>
+
 ## 🚀 快速开始
 
 ### 环境要求
@@ -56,6 +100,7 @@ node server.js
 | `update.js` | 离线数据更新脚本 |
 | `启动页面.bat` | Windows 一键启动器（启动服务器并打开浏览器） |
 | `赞赏码.jpg` | 赞赏支持二维码（页面底部「☕ 赞赏支持」面板 / README 展示） |
+| `screenshots/` | 项目界面截图（README「📸 界面截图」展示用） |
 
 ## 📊 数据来源
 
