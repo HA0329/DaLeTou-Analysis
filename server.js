@@ -1,7 +1,8 @@
 // 大乐透分析 - 本地静态服务器（零依赖，用系统自带的 Node.js 运行）
-// 作用：以 http://127.0.0.1:8123 提供本目录页面。
-// 必须用本服务器打开页面，「🔄 在线更新」才能工作
-// （浏览器禁止 file:// 页面发起跨域 fetch 请求）。
+// 作用：以 http://127.0.0.1:8123 提供本目录页面与数据文件（data.js）。
+// 必须用本服务器打开页面，「🔄 在线更新」与「💾 更新并写入数据文件」才能工作
+// （浏览器禁止 file:// 页面发起跨域 fetch 请求，且浏览器无本地文件写权限，
+//   写入 data.js 由本服务器的 /save-data 接口代写）。
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -9,6 +10,7 @@ const path = require('path');
 const ROOT = __dirname;
 const PORT = 8123;
 const INDEX = '大乐透历史数据分析.html'; // UTF-8 文件名
+const DATA_FILE = 'data.js';              // 历史开奖数据文件（独立于页面，页面通过 <script src="data.js"> 加载）
 const SPORTTERY_BASE = 'https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry';
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -52,6 +54,18 @@ function validateRows(rows) {
   }
 }
 
+// 生成 data.js 文件内容（与 update.js 输出格式一致）
+function dataFileContent(rows) {
+  return [
+    '// 大乐透历史开奖数据（自动生成，请勿手动编辑）',
+    '// 数据来源：中国体育彩票官网 webapi.sporttery.cn',
+    '// 数据格式 v2：每期为 [期号, 开奖日期, 前区[5], 后区[2], 奖池, 销量, 开奖公告[[奖级,注数,单注奖金],...]]',
+    '// 最新一期：第 ' + rows[0][0] + ' 期（' + rows[0][1] + '），共 ' + rows.length + ' 期',
+    'var RAW_DATA = ' + JSON.stringify(rows) + ';',
+    ''
+  ].join('\n');
+}
+
 const server = http.createServer((req, res) => {
   let p;
   try { p = decodeURIComponent(req.url.split('?')[0]); } catch (e) { p = req.url; }
@@ -80,34 +94,26 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // /save-data 写入接口：把最新数据直接写回 HTML 文件的内嵌 RAW_DATA 块。
+  // /save-data 写入接口：把最新数据直接写回同目录 data.js 数据文件。
   // 浏览器没有本地文件写权限，由本服务器代写（只监听 127.0.0.1，仅本机可访问）。
   if (p === '/save-data' && req.method === 'POST') {
-    let body = '';
-    req.on('data', (c) => { body += c; if (body.length > 4e6) req.destroy(); });
+    const chunks = [];
+    let total = 0;
+    req.on('data', (c) => {
+      total += c.length;
+      if (total > 4e6) { req.destroy(); return; }
+      chunks.push(c);
+    });
     req.on('end', () => {
       try {
+        // 注意：必须累积 Buffer 后一次性按 UTF-8 解码，逐块拼接会把跨块的中文字符解成乱码
+        const body = Buffer.concat(chunks).toString('utf8');
         const rows = JSON.parse(body);
         validateRows(rows);
-        const htmlPath = path.join(ROOT, INDEX);
-        let html = fs.readFileSync(htmlPath, 'utf8');
-        const marker = 'const RAW_DATA = ';
-        const start = html.indexOf(marker);
-        if (start < 0) throw new Error('页面中未找到数据块');
-        const arrStart = start + marker.length;
-        let depth = 0, arrEnd = -1;
-        for (let i = arrStart; i < html.length; i++) {
-          const ch = html[i];
-          if (ch === '[') depth++;
-          else if (ch === ']') { depth--; if (depth === 0) { arrEnd = i; break; } }
-        }
-        if (arrEnd < 0) throw new Error('数据块不完整');
-        let tail = html.slice(arrEnd + 1);
-        if (tail[0] === ';') tail = tail.slice(1);
-        html = html.slice(0, start) + marker + JSON.stringify(rows) + ';' + tail;
-        fs.writeFileSync(htmlPath, html, 'utf8');
+        const dataPath = path.join(ROOT, DATA_FILE);
+        fs.writeFileSync(dataPath, dataFileContent(rows), 'utf8');
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
-        res.end(JSON.stringify({ ok: true, count: rows.length }));
+        res.end(JSON.stringify({ ok: true, count: rows.length, file: DATA_FILE }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
         res.end(JSON.stringify({ ok: false, error: e.message }));
@@ -127,7 +133,8 @@ const server = http.createServer((req, res) => {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('404 未找到: ' + p); return;
     }
-    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream' });
+    // no-cache：保证 data.js 更新后浏览器能立即拿到新数据
+    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     fs.createReadStream(file).pipe(res);
   });
 });

@@ -1,7 +1,7 @@
 {
   "name": "daletou-analysis",
-  "version": "1.0.0",
-  "description": "大乐透历史开奖数据分析：单文件网页应用 + 零依赖本地服务器",
+  "version": "1.2.0",
+  "description": "大乐透历史开奖数据分析：网页应用 + 独立数据文件（data.js）+ 零依赖本地服务器",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
