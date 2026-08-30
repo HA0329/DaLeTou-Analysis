@@ -70,7 +70,7 @@
 
 ### 环境要求
 
-- **Node.js ≥ 18**（使用内置 `fetch`；项目零第三方依赖，无需 `npm install`）
+- **Node.js ≥ 18**（使用内置 `fetch`；项目零第三方依赖，无需 `npm install`）。版本低于 18 时仍可正常浏览页面，但「🔄 在线更新」「💾 更新并写入数据文件」与 `node update.js` 不可用（`server.js` / `update.js` 启动时会给出明确提示）
 
 ### 启动
 
@@ -95,8 +95,9 @@ node server.js
 
 | 文件 | 说明 |
 | --- | --- |
-| `大乐透历史数据分析.html` | 网页应用（不再内嵌数据，运行时加载同目录 `data.js`） |
-| `data.js` | 历史开奖数据文件（自动生成，含每期奖池、销量与开奖公告，以 `var RAW_DATA = ` 开头） |
+| `大乐透历史数据分析.html` | 网页应用（HTML 结构与样式；脚本不内嵌，运行时经 `defer` 并行加载 `data.js` 与 `app.js`，不阻塞首屏渲染） |
+| `data.js` | 历史开奖数据文件（自动生成，含每期奖池、销量与开奖公告，以 `var RAW_DATA = ` 开头；`defer` 加载） |
+| `app.js` | 网页脚本（原内嵌于 HTML 的约 2000 行逻辑拆分而来：核心计算 / 页面渲染与交互 / 中奖查询三个模块，`defer` 加载） |
 | `server.js` | 本地静态服务器 + 体彩官网接口代理 + `data.js` 写回接口 |
 | `update.js` | 离线数据更新脚本（增量更新；`--full` 全量重建） |
 | `启动页面.bat` | Windows 一键启动器（启动服务器并打开浏览器） |
@@ -110,7 +111,7 @@ node server.js
 
 ## 🔧 开发说明
 
-- 数据与页面分离：页面通过 `<script src="data.js"></script>` 加载数据，`data.js` 以 `var RAW_DATA = ` 开头，编辑页面布局时请勿删除该引入
+- 数据与页面分离：页面通过 `<script defer src="data.js"></script>` 加载数据，`data.js` 以 `var RAW_DATA = ` 开头；页面脚本位于独立文件 `app.js`（`defer` 按序执行，先于 `app.js` 的 `data.js` 保证 `RAW_DATA` 就绪），编辑页面布局时请勿删除这两处脚本引入
 - `server.js` 的 `/save-data` 写回接口（写 `data.js`）仅监听 `127.0.0.1`，只服务本机
 
 ## ☕ 赞赏支持

@@ -16,6 +16,13 @@
 const fs = require('fs');
 const path = require('path');
 
+// 本脚本依赖 Node 18+ 的全局 fetch；版本过低时直接退出并给出明确提示
+const NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10);
+if (NODE_MAJOR < 18) {
+  console.error('需要 Node.js ≥ 18（当前 ' + process.versions.node + '）：本脚本依赖全局 fetch 抓取官网数据，请先升级 Node.js。');
+  process.exit(1);
+}
+
 const DATA_FILE = path.join(__dirname, 'data.js');
 const PAGE_SIZE = 100;
 const HEADERS = {
@@ -63,9 +70,11 @@ async function fetchAll() {
 }
 
 // 增量抓取：遇到已存在的期号即停止（列表为最新在前）
+// 返回 { list, total, stopped }：list 为抓取到的新数据，total 为官网数据总期数，
+// stopped 表示是否因遇到已存在的期号而提前停止（供 main 做「跳期」兜底判断）。
 async function fetchNew(existingSet) {
   const all = [];
-  let page = 1, total = null;
+  let page = 1, total = null, stopped = false;
   while (true) {
     const url = 'https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry' +
       '?gameNo=85&provinceId=0&pageSize=' + PAGE_SIZE + '&isVerify=1&pageNo=' + page;
@@ -73,7 +82,6 @@ async function fetchNew(existingSet) {
     if (!j || !j.success || !j.value || !Array.isArray(j.value.list)) throw new Error('接口返回格式异常');
     if (total === null) total = j.value.total;
     const list = j.value.list;
-    let stopped = false;
     for (const it of list) {
       if (existingSet.has(String(it.lotteryDrawNum))) { stopped = true; break; }
       all.push(it);
@@ -84,7 +92,7 @@ async function fetchNew(existingSet) {
     page++;
     await new Promise((r) => setTimeout(r, 150));
   }
-  return all;
+  return { list: all, total: total, stopped: stopped };
 }
 
 // 单条官网记录 → 紧凑行
@@ -163,21 +171,30 @@ async function main() {
     } catch (e) { /* 回退全量 */ }
   }
 
-  let newRows;
+  let rows, newRows;
+  let fullRebuilt = false;   // 全量重建时 list 已是完整数据（最新在前），不能再按「新 + 旧」拼接
   if (isFull || !existing) {
     console.log(isFull ? '全量重建模式…' : '无法读取 data.js 内嵌数据，改为全量抓取…');
-    newRows = toCompact(await fetchAll());
+    rows = toCompact(await fetchAll());
   } else {
     const existingSet = new Set(existing.map((r) => String(r[0])));
     console.log('现有数据：' + existing.length + ' 期，最新 ' + existing[0][0] + '（' + existing[0][1] + '），增量抓取中…');
-    newRows = toCompact(await fetchNew(existingSet)).filter((r) => !existingSet.has(String(r[0])));
+    let res = await fetchNew(existingSet);
+    let list = res.list;
+    // 兜底：增量抓取在遇到已存在期号时停止；若官网总期数仍多于「本地 + 本次新增」，
+    // 说明历史中间可能有跳期缺失（如官网某期未发布而漏补），改为全量重建一次性补全。
+    if (res.stopped && res.total != null && res.total > existing.length + list.length) {
+      console.log('检测到官网总期数（' + res.total + '）多于本地数据（现有 ' + existing.length + ' 期 + 本次新增 ' + list.length + ' 期）——可能存在中间跳期，改为全量重建…');
+      list = await fetchAll();
+      fullRebuilt = true;
+    }
+    newRows = toCompact(list).filter((r) => !existingSet.has(String(r[0])));
     if (!newRows.length) {
       console.log('已是最新（最新 ' + existing[0][0] + ' 期），无需更新。');
       return;
     }
+    rows = fullRebuilt ? toCompact(list) : newRows.concat(existing);
   }
-
-  const rows = newRows.concat(isFull || !existing ? [] : existing);
   assertRows(rows);
 
   fs.writeFileSync(DATA_FILE, dataFileContent(rows), 'utf8');

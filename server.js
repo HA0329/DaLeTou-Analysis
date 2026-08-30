@@ -7,10 +7,18 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
+// 启动时检查 Node 版本：全局 fetch 与 AbortSignal.timeout 需要 Node ≥ 18。
+// Node < 18 时仍可正常浏览静态页面，但「🔄 在线更新」与「💾 更新并写入数据文件」将不可用。
+const NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10);
+if (NODE_MAJOR < 18) {
+  console.warn('⚠️ 当前 Node.js 版本为 ' + process.versions.node + '（需要 ≥ 18）：全局 fetch 不可用，' +
+    '「在线更新」与「更新并写入数据文件」将无法工作。请升级 Node.js（仅浏览静态页面不受影响）。');
+}
+
 const ROOT = __dirname;
 const PORT = 8123;
 const INDEX = '大乐透历史数据分析.html'; // UTF-8 文件名
-const DATA_FILE = 'data.js';              // 历史开奖数据文件（独立于页面，页面通过 <script src="data.js"> 加载）
+const DATA_FILE = 'data.js';              // 历史开奖数据文件（独立于页面，页面经 <script defer src="data.js"> 加载）
 const SPORTTERY_BASE = 'https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry';
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
