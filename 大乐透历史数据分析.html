@@ -3,330 +3,63 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="中国体育彩票超级大乐透历史开奖数据分析：走势、遗漏、跨度、重号、共现热力图、奖金与返奖率、中奖查询与历史回测。数据来自体彩官网，零依赖本地运行。">
+<meta name="theme-color" content="#e23a3a">
 <title>大乐透历史开奖数据分析</title>
-<style>
-:root{
-  --red:#e23a3a; --red-d:#c22a2a; --blue:#2f6fd6; --blue-d:#1f56b0;
-  --ink:#20242e; --muted:#7a8291; --bg:#f4f6fa; --card:#ffffff;
-  --line:#e6e9f0; --warm:#fff7ec; --green:#2e9e5b;
-}
-*{box-sizing:border-box; margin:0; padding:0;}
-[hidden]{display:none !important;}
-html{scroll-behavior:smooth;}
-body{
-  font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC","Segoe UI",sans-serif;
-  background:var(--bg); color:var(--ink); line-height:1.6; padding-bottom:40px;
-}
-button{font-family:inherit;}
-section,[id]{scroll-margin-top:var(--scroll-offset,76px);}
-
-/* ---------- 顶部工具栏 ---------- */
-.topbar{
-  position:sticky; top:0; z-index:100;
-  background:rgba(255,255,255,.94); backdrop-filter:blur(8px);
-  border-bottom:1px solid var(--line); box-shadow:0 1px 8px rgba(31,36,48,.07);
-}
-.tb-inner{max-width:1180px; margin:0 auto; padding:9px 16px; display:flex; align-items:center; gap:6px 14px; flex-wrap:wrap;}
-.brand{order:1; font-weight:800; font-size:16px; color:var(--ink); text-decoration:none; white-space:nowrap;}
-.brand-sub{font-size:11px; color:var(--muted); font-weight:500; margin-left:6px;}
-/* 导航独占一行（order:3 + flex:1 1 100%）且链接自动换行：
-   所有分区入口始终完整可见、可点击，不再被横向裁剪隐藏 */
-.nav{order:3; flex:1 1 100%; display:flex; flex-wrap:wrap; gap:2px; min-width:0;}
-.nav a{font-size:13px; color:#4a5160; text-decoration:none; padding:5px 10px; border-radius:8px; white-space:nowrap;}
-.nav a:hover{background:#eef1f6; color:var(--ink);}
-.nav a.active{background:#fdeaea; color:var(--red); font-weight:600;}
-.tb-actions{order:2; display:flex; align-items:center; gap:8px; margin-left:auto; flex-wrap:wrap;}
-.data-chip{font-size:12px; padding:4px 11px; border-radius:20px; background:#eef1f6; color:#6b7280; white-space:nowrap; cursor:help;}
-.data-chip.cache{background:#e9f0fb; color:var(--blue);}
-.data-chip.online{background:#e8f6ee; color:var(--green);}
-.btn{padding:7px 14px; border:none; border-radius:9px; cursor:pointer; font-size:13px; transition:background .15s, transform .05s; white-space:nowrap;}
-.btn:active{transform:translateY(1px);}
-.btn-primary{background:var(--red); color:#fff;}
-.btn-primary:hover{background:var(--red-d);}
-.btn-primary:disabled{opacity:.55; cursor:wait;}
-.btn-ghost{background:#eef1f6; color:#3a4150;}
-.btn-ghost:hover{background:#e2e6ef;}
-.update-bar{max-width:1180px; margin:0 auto; padding:0 16px 10px;}
-.update-track{height:6px; border-radius:4px; background:#eef1f6; overflow:hidden;}
-.update-fill{height:100%; width:0; background:linear-gradient(90deg,#e23a3a,#f39c12); transition:width .2s;}
-.update-text{font-size:12px; color:var(--muted); margin-top:5px; display:block;}
-
-/* ---------- 页头 ---------- */
-.hero{
-  background:linear-gradient(135deg,#e23a3a 0%,#b81f2f 55%,#7c1220 100%);
-  color:#fff; padding:26px 20px 22px; text-align:center;
-}
-.hero h1{font-size:24px; letter-spacing:2px; text-shadow:0 2px 6px rgba(0,0,0,.25);}
-.hero p{margin-top:8px; font-size:13px; opacity:.92;}
-.hero .hero-note{margin-top:6px; font-size:12px; opacity:.75;}
-
-/* ---------- 面板 ---------- */
-main{max-width:1180px; margin:0 auto; padding:0 16px;}
-.panel{
-  background:var(--card); border:1px solid var(--line); border-radius:12px;
-  padding:16px 20px 20px; margin-top:16px; box-shadow:0 2px 8px rgba(31,36,48,.05);
-}
-.panel-head{display:flex; align-items:center; gap:10px;}
-.panel-head h2{font-size:18px; color:#262b36; flex:1;}
-.panel-toggle{
-  border:none; background:none; font-size:13px; color:var(--muted); cursor:pointer;
-  padding:3px 9px; border-radius:8px; line-height:1;
-}
-.panel-toggle:hover{background:#eef1f6; color:var(--ink);}
-.panel-body{margin-top:12px;}
-.panel-body.collapsed{display:none;}
-.panel h3{font-size:14.5px; color:#4a5160; margin:6px 0 8px; font-weight:600;}
-
-.cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-top:16px;}
-.card{
-  background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px;
-  box-shadow:0 2px 8px rgba(31,36,48,.05); transition:transform .15s, box-shadow .15s;
-}
-.card:hover{transform:translateY(-2px); box-shadow:0 6px 16px rgba(31,36,48,.1);}
-.card .k{font-size:12.5px; color:var(--muted);}
-.card .v{font-size:20px; font-weight:700; margin-top:4px;}
-.card .v.big{color:#c0392b;}
-.card .v.good{color:var(--green);}
-.card .s{font-size:12px; color:var(--muted); margin-top:2px;}
-
-.latest{display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:15px;}
-.latest .info{color:var(--muted); font-size:13px; margin-right:6px;}
-
-.chart-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:10px;}
-.chart-box{position:relative; background:#fbfcfe; border:1px solid var(--line); border-radius:10px; padding:12px 14px 8px;}
-.chart-box canvas{width:100%; display:block; cursor:crosshair;}
-.chart-tip{
-  position:absolute; display:none; pointer-events:none; z-index:5; max-width:280px;
-  background:rgba(32,36,46,.93); color:#fff; font-size:12px; line-height:1.5;
-  padding:6px 10px; border-radius:8px; white-space:nowrap; box-shadow:0 4px 12px rgba(0,0,0,.25);
-}
-.chart-tip b{color:#ffd9d9;}
-
-.toolbar{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:8px 0 6px; font-size:13px; color:#4a5160;}
-.toolbar label{display:inline-flex; align-items:center; gap:4px; cursor:pointer;}
-.toolbar input[type=text], .toolbar input[type=search], .toolbar select{
-  padding:6px 10px; border:1px solid #cfd5e0; border-radius:8px; font-size:13px; font-family:inherit;
-}
-.toolbar input[type=search]:focus{outline:2px solid rgba(47,111,214,.35); border-color:var(--blue);}
-
-.ball{
-  display:inline-flex; align-items:center; justify-content:center; min-width:26px; height:26px;
-  padding:0 5px; border-radius:50%; color:#fff; font-size:13px; font-weight:700;
-  text-shadow:0 1px 1px rgba(0,0,0,.2); margin:1px;
-}
-.ball.f{background:radial-gradient(circle at 30% 25%, #ff8a7a, var(--red) 65%, var(--red-d));}
-.ball.b{background:radial-gradient(circle at 30% 25%, #7fb1f2, var(--blue) 65%, var(--blue-d));}
-.ball.sm{min-width:21px; height:21px; font-size:11px;}
-
-.table-wrap{overflow-x:auto; margin-top:8px;}
-table{width:100%; border-collapse:collapse; font-size:13px;}
-th,td{padding:7px 10px; text-align:center; border-bottom:1px solid var(--line); white-space:nowrap;}
-th{background:#f4f6fa; color:#4a5160; font-weight:600; cursor:pointer; user-select:none; position:sticky; top:0;}
-th:hover{background:#eaeef5;}
-td.l{text-align:left;}
-tr:hover td{background:#fafbfe;}
-.badge{display:inline-block; padding:1px 8px; border-radius:20px; font-size:12px; font-weight:600;}
-.badge.hot{background:#fdeaea; color:var(--red);}
-.badge.cold{background:#e9f0fb; color:var(--blue);}
-.badge.norm{background:#eef1f5; color:#6b7280;}
-.badge.good{background:#e8f6ee; color:var(--green);}
-
-.rank-list{list-style:none; font-size:13.5px;}
-.rank-list li{display:flex; align-items:center; gap:8px; padding:5px 2px; border-bottom:1px dashed var(--line);}
-.rank-list li:last-child{border-bottom:none;}
-.rank-list .rk{width:22px; color:var(--muted); font-weight:700; text-align:right;}
-.rank-list .cnt{margin-left:auto; color:var(--muted); font-size:12.5px;}
-
-/* ---------- 号码热度矩阵 ---------- */
-.matrix-block{margin-top:10px;}
-.matrix-block h3{margin-top:0;}
-.ball-grid{display:flex; flex-wrap:wrap; gap:7px; margin-top:6px;}
-.gball{
-  width:36px; height:36px; border:none; border-radius:50%; color:#fff; cursor:pointer;
-  font-size:13.5px; font-weight:700; font-family:inherit;
-  transition:transform .12s, box-shadow .12s, outline-color .12s;
-}
-.gball.f{background:radial-gradient(circle at 30% 25%, #ff8a7a, var(--red) 65%, var(--red-d));}
-.gball.b{background:radial-gradient(circle at 30% 25%, #7fb1f2, var(--blue) 65%, var(--blue-d));}
-.gball:hover{transform:scale(1.14); box-shadow:0 3px 10px rgba(0,0,0,.22);}
-.gball.sel{outline:3px solid var(--ink); outline-offset:2px; transform:scale(1.1);}
-.matrix-detail{
-  margin-top:14px; background:#fbfcfe; border:1px solid var(--line); border-radius:12px; padding:14px 16px;
-  animation:fadeIn .18s ease;
-}
-@keyframes fadeIn{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;}}
-.md-head{display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:16px;}
-.md-zone{color:var(--muted); font-size:12.5px;}
-.md-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(132px,1fr)); gap:8px;}
-.md-stat{background:#fff; border:1px solid var(--line); border-radius:10px; padding:8px 12px; display:flex; flex-direction:column;}
-.md-stat span{font-size:12px; color:var(--muted);}
-.md-stat b{font-size:16px; margin-top:2px;}
-.md-last30{margin-top:12px; font-size:12.5px; color:#4a5160; display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
-.dots{display:inline-flex; flex-wrap:wrap; gap:3px;}
-.dot{width:9px; height:9px; border-radius:2px; background:#e6e9f0; display:inline-block;}
-.dot.on{background:var(--green);}
-
-/* ---------- 选号 ---------- */
-.pick-note{display:flex; flex-wrap:wrap; align-items:center; gap:4px; padding:7px 10px; margin-top:8px;
-  background:#fbfcfe; border:1px solid var(--line); border-radius:10px; font-size:14px;}
-.pick-note .idx{color:var(--muted); font-size:12px; margin-right:6px;}
-.hint{font-size:12.5px; color:var(--muted); margin-top:6px;}
-
-/* ---------- 预测 ---------- */
-.pred-desc{margin:2px 0 10px; padding:8px 12px; background:#fbfcfe; border:1px solid var(--line); border-radius:10px; font-size:13px; color:#4a5160;}
-.pred-reco{display:flex; flex-direction:column; gap:8px; margin-top:12px; padding:10px 14px; background:linear-gradient(135deg,#fff7ec,#fdf1e3); border:1px solid #f0e2c8; border-radius:10px; font-size:13.5px;}
-.pr-label{color:#a8641e; font-weight:600; margin-right:6px;}
-.pred-score{color:var(--muted); font-size:11.5px;}
-.pred-meta{color:var(--muted); font-size:12px; margin-left:auto;}
-.bt-wrap{margin-top:16px;}
-.bt-wrap h3{font-size:14px; color:#4a5160; margin-bottom:6px;}
-
-/* ---------- 回到顶部 / Toast ---------- */
-.backtop{
-  position:fixed; right:22px; bottom:26px; width:42px; height:42px; border-radius:50%;
-  background:var(--red); color:#fff; text-decoration:none; display:flex; align-items:center; justify-content:center;
-  font-size:18px; box-shadow:0 4px 14px rgba(194,42,42,.35);
-  opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; z-index:99;
-}
-.backtop.show{opacity:1; pointer-events:auto;}
-.backtop:hover{transform:translateY(-3px); background:var(--red-d);}
-/* 跳到底部（与回到顶部对称，蓝色） */
-.backbottom{
-  position:fixed; right:22px; bottom:78px; width:42px; height:42px; border-radius:50%;
-  background:var(--blue); color:#fff; text-decoration:none; display:flex; align-items:center; justify-content:center;
-  font-size:18px; box-shadow:0 4px 14px rgba(47,111,214,.35);
-  opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; z-index:99;
-}
-.backbottom.show{opacity:1; pointer-events:auto;}
-.backbottom:hover{transform:translateY(3px); background:var(--blue-d);}
-.toast{
-  position:fixed; left:50%; bottom:30px; transform:translateX(-50%) translateY(16px);
-  background:rgba(32,36,46,.94); color:#fff; font-size:13.5px; padding:10px 18px; border-radius:10px;
-  opacity:0; pointer-events:none; transition:opacity .25s, transform .25s; z-index:200;
-  max-width:min(90vw,540px); text-align:center; box-shadow:0 6px 20px rgba(0,0,0,.25);
-}
-.toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
-.toast.ok{background:rgba(46,158,91,.96);}
-.toast.err{background:rgba(194,42,42,.96);}
-.toast .toast-btn{
-  margin-left:10px; padding:4px 12px; border:none; border-radius:8px; cursor:pointer;
-  background:#fff; color:#20242e; font-size:12.5px; font-weight:600; font-family:inherit; vertical-align:middle;
-}
-.toast .toast-btn:hover{background:#f0f2f6;}
-
-footer{max-width:1180px; margin:26px auto 0; padding:16px; font-size:12.5px; color:var(--muted);
-  background:var(--warm); border:1px solid #f0e2c8; border-radius:10px;}
-footer b{color:#a8641e;}
-
-/* 玩法规则（2026 新规）表格 */
-.rules-table{width:100%; border-collapse:collapse; margin:10px 0 6px; font-size:13.5px;}
-.rules-table th,.rules-table td{border:1px solid #e3dccb; padding:8px 10px; text-align:left;}
-.rules-table th{background:var(--warm); color:#7a5a1e;}
-.rules-table td{background:#fff;}
-.rules-table tr td:first-child{font-weight:bold; color:#a8641e; white-space:nowrap;}
-.rules-table .up{color:#c0392b; font-weight:bold;}
-.rules-note{margin:6px 0 2px; font-size:12.5px; color:var(--muted);}
-
-/* 中奖查询表单 */
-.check-form{display:flex; flex-direction:column; gap:10px; max-width:680px; margin:10px 0;}
-.check-form label{font-size:13.5px; color:#555;}
-.check-form input[type=text]{width:100%; padding:8px 12px; border:1px solid #ddd; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;}
-.check-form input[type=text]:focus{outline:none; border-color:#5b3fa8;}
-.check-form .ck-extra{display:flex; align-items:center; gap:6px; color:#7a5a1e; font-size:13.5px;}
-.check-form .ck-extra input{width:auto; margin:0;}
-.check-form button{align-self:flex-start; margin-top:4px;}
-.ck-box{margin-top:14px; padding:14px; background:#fff; border:1px solid #e3dccb; border-radius:10px; font-size:14px; line-height:1.9;}
-.ck-box p{margin:4px 0;}
-.ck-box .dim{color:#999; font-size:12.5px;}
-
-/* ---------- 最新一期扩展 / 开奖公告 ---------- */
-.latest .act{margin-left:auto;}
-.latest-extra{margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px;}
-.lex{background:#fbfcfe; border:1px solid var(--line); border-radius:10px; padding:10px 14px;}
-.lex .k{font-size:12px; color:var(--muted);}
-.lex .v{font-size:17px; font-weight:700; margin-top:3px;}
-.lex .v.big{color:#c0392b;}
-.lex .v.good{color:var(--green);}
-.lex .s{font-size:11.5px; color:var(--muted); margin-top:2px;}
-.lex.up{border-color:#f0b9b9; background:linear-gradient(135deg,#fff7f7,#fdeeee);}
-.lex.warm{border-color:#f0d9a8; background:linear-gradient(135deg,#fffdf6,#fff7ec);}
-.countdown{font-variant-numeric:tabular-nums;}
-.stale-note{margin-top:14px; padding:10px 14px; border-radius:10px; background:#fff7ec; border:1px solid #f0d9a8; color:#8a5a12; font-size:13px;}
-.stale-note b{color:#c0392b;}
-.prize-table{width:100%; border-collapse:collapse; margin:8px 0 4px; font-size:13px;}
-.prize-table th,.prize-table td{border:1px solid #e6e9f0; padding:6px 10px; text-align:center; white-space:nowrap;}
-.prize-table th{background:#f4f6fa; color:#4a5160; font-weight:600;}
-.prize-table td:first-child{font-weight:600; text-align:left;}
-.prize-table .tt{background:#fafbfe; font-weight:700; text-align:left;}
-.prize-table .dim{color:var(--muted); font-weight:400;}
-.prize-table .up{color:#c0392b; font-weight:700;}
-
-/* ---------- 号码走势图 ---------- */
-.trend-block{margin-top:16px;}
-.trend-block h3{margin-top:0;}
-.trend-scroll{overflow-x:auto; padding-bottom:4px;}
-.trend-head,.trend-row{display:grid; gap:2px; align-items:center; font-size:11px; margin-top:3px;}
-.trend-head .tcell{background:#f4f6fa; color:#4a5160; font-weight:600; text-align:center; padding:2px 0; border-radius:4px;}
-.tissue{width:56px; text-align:center; color:var(--muted); font-size:10.5px; white-space:nowrap;}
-.tcell{width:24px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:5px; cursor:pointer; padding:0;}
-.tcell .tb{width:20px; height:20px; line-height:20px; text-align:center; border-radius:50%; color:#fff; font-size:10.5px; font-weight:700; text-shadow:0 1px 1px rgba(0,0,0,.2);}
-.tb.f{background:radial-gradient(circle at 30% 25%, #ff8a7a, var(--red) 65%, var(--red-d));}
-.tb.b{background:radial-gradient(circle at 30% 25%, #7fb1f2, var(--blue) 65%, var(--blue-d));}
-.tcell.empty{background:#f7f8fb; cursor:default;}
-.tcell.f:hover{outline:2px solid var(--red); outline-offset:1px;}
-.tcell.b:hover{outline:2px solid var(--blue); outline-offset:1px;}
-.tcell.sel-f{outline:2px solid var(--ink); outline-offset:1px;}
-.tcell.sel-b{outline:2px solid var(--ink); outline-offset:1px;}
-
-/* ---------- 记录表展开公告 ---------- */
-tr.rec-open td{background:#fdf6ec;}
-.ann-row td{background:#fbfcfe !important; padding:10px 14px !important; text-align:left;}
-.ann-row .prize-table{margin:0;}
-.btn-sm{padding:4px 10px; font-size:12px; border-radius:7px;}
-.ck-tools{display:flex; gap:8px; flex-wrap:wrap;}
-
-@media (max-width:860px){
-  .chart-grid{grid-template-columns:1fr;}
-  .hero h1{font-size:20px;}
-  .tb-actions .btn{font-size:12px; padding:6px 10px;}
-  .data-chip{display:none;}
-  /* 小屏：导航改为横向滑动（保留细滚动条提示可滑动，避免整块换行占满屏幕） */
-  .nav{flex-wrap:nowrap; overflow-x:auto; scrollbar-width:thin; -webkit-overflow-scrolling:touch; padding-bottom:3px;}
-  .nav::-webkit-scrollbar{height:5px;}
-  .nav::-webkit-scrollbar-thumb{background:#c9cfda; border-radius:3px;}
-  .nav::-webkit-scrollbar-track{background:transparent;}
-}
-</style>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%23e23a3a'/%3E%3Ctext x='16' y='22' font-size='16' text-anchor='middle' fill='%23fff' font-family='sans-serif'%3E7%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
 
 <header class="topbar">
   <div class="tb-inner">
     <a class="brand" href="#top">🎱 大乐透分析<span class="brand-sub">历史数据</span></a>
+    <div class="tb-actions">
+      <span class="data-chip" id="dataChip" title="数据来源与更新时间">数据加载中…</span>
+      <label class="range-pick" title="所有统计（频率、遗漏、分布、预测等）都按此范围重新计算">
+        <span>统计范围</span>
+        <select id="globalRange">
+          <option value="0" selected>全部历史</option>
+          <option value="2000">近 2000 期</option>
+          <option value="1000">近 1000 期</option>
+          <option value="500">近 500 期</option>
+          <option value="300">近 300 期</option>
+          <option value="100">近 100 期</option>
+          <option value="50">近 50 期</option>
+        </select>
+      </label>
+      <button class="btn btn-primary" id="btnUpdate" title="从中国体育彩票官网接口增量拉取最新开奖并缓存到本地">🔄 在线更新</button>
+      <button class="btn btn-primary" id="btnSaveData" title="抓取最新数据并写回同目录 data.js（需通过本地服务器打开）">💾 写入数据文件</button>
+      <button class="btn btn-ghost" id="btnReset" title="清除本地缓存，恢复使用 data.js 内置数据">恢复内置</button>
+      <button class="btn btn-ghost icon-btn" id="btnTheme" title="切换深色 / 浅色主题">🌙</button>
+    </div>
+  </div>
+  <div class="nav-wrap">
     <nav class="nav" id="mainNav">
       <a href="#overview" data-sec="overview">概览</a>
-      <a href="#rules" data-sec="rules">规则</a>
-      <a href="#check" data-sec="check">查询</a>
       <a href="#latest" data-sec="latest">最新</a>
+      <a href="#check" data-sec="check">中奖查询</a>
+      <a href="#rules" data-sec="rules">规则</a>
       <a href="#pooltrend" data-sec="pooltrend">奖池</a>
       <a href="#trend" data-sec="trend">走势图</a>
       <a href="#freq" data-sec="freq">频率</a>
-      <a href="#sum" data-sec="sum">和值</a>
-      <a href="#dist" data-sec="dist">分布</a>
       <a href="#omit" data-sec="omit">遗漏</a>
+      <a href="#sum" data-sec="sum">和值</a>
+      <a href="#span" data-sec="span">跨度</a>
+      <a href="#dist" data-sec="dist">结构</a>
+      <a href="#repeat" data-sec="repeat">重号邻号</a>
+      <a href="#mod3" data-sec="mod3">012路</a>
+      <a href="#backzone" data-sec="backzone">后区</a>
       <a href="#matrix" data-sec="matrix">号码矩阵</a>
+      <a href="#cooccur" data-sec="cooccur">共现</a>
       <a href="#combo" data-sec="combo">组合</a>
+      <a href="#prize" data-sec="prize">奖金</a>
       <a href="#pick" data-sec="pick">选号</a>
       <a href="#predict" data-sec="predict">预测</a>
       <a href="#records" data-sec="records">记录</a>
       <a href="#donate" data-sec="donate">支持</a>
     </nav>
-    <div class="tb-actions">
-      <span class="data-chip" id="dataChip" title="数据来源与更新时间">数据加载中…</span>
-      <button class="btn btn-primary" id="btnUpdate" title="从中国体育彩票官网接口拉取全部历史开奖并缓存到本地">🔄 在线更新</button>
-      <button class="btn btn-primary" id="btnSaveData" title="抓取最新数据并直接写回同目录 data.js 数据文件（需通过启动页面.bat 打开，浏览器自身无文件写权限，由本地服务器代写）">💾 更新并写入数据文件</button>
-      <button class="btn btn-ghost" id="btnReset" title="清除本地缓存，恢复使用页面内置数据">恢复内置</button>
-    </div>
   </div>
   <div class="update-bar" id="updateBar" hidden>
     <div class="update-track"><div class="update-fill" id="updateFill"></div></div>
@@ -335,16 +68,58 @@ tr.rec-open td{background:#fdf6ec;}
 </header>
 
 <a class="backtop" id="backtop" href="#top" title="回到顶部">↑</a>
-<a class="backbottom" id="backbottom" href="#donate" title="跳到底部（记录 / 赞赏）">↓</a>
+<a class="backbottom" id="backbottom" href="#donate" title="跳到底部">↓</a>
 <div class="toast" id="toast"></div>
 
 <header class="hero" id="top">
   <h1>🎱 大乐透历史开奖数据分析</h1>
   <p id="heroSub">数据加载中…</p>
-  <p class="hero-note">💡 「最新一期」含当前奖池、本期销量、完整开奖公告与下次开奖倒计时；图表可悬停查看数值；号码走势图 / 号码矩阵可点击查看单个号码统计；开奖记录点击任意行可展开该期公告、点击期号可直接填入中奖查询；「🔄 在线更新」实时拉取官网数据（需通过「启动页面.bat」打开，浏览器禁止 file:// 页面跨域请求；数据存放于同目录 data.js，可「💾 更新并写入数据文件」写回）；「🎯 中奖查询」输入你的号码按新规判定奖级；「🔮 预测」提供 7 种统计方法并含历史回测。</p>
+  <p class="hero-note">顶部「统计范围」可一键切换全历史 / 近 N 期，所有图表与统计会即时重算；图表悬停查看数值，号码矩阵与走势图点击号码可查看详情；「🔄 在线更新」增量拉取官网数据，「💾 写入数据文件」写回 data.js。</p>
 </header>
 
 <main>
+  <!-- ============ 概览 ============ -->
+  <section class="cards" id="overview" data-sec="overview"></section>
+
+  <!-- ============ 最新一期 ============ -->
+  <section class="panel" id="latest" data-sec="latest">
+    <div class="panel-head"><h2>🕒 最新一期开奖</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
+    <div class="panel-body">
+      <div class="latest" id="latestDraw"></div>
+      <div class="latest-extra" id="latestExtra"></div>
+      <div class="stale-note" id="staleNote" hidden></div>
+      <h3 style="margin-top:16px;">🏆 开奖公告（本期各奖级中奖注数与单注奖金）</h3>
+      <div id="latestAnnounce"></div>
+      <p class="rules-note">数据来源：中国体育彩票官网开奖公告；奖池为当期开奖后滚存金额，作为下一期奖池。开奖时间为每周一、三、六 21:25（当日 21:00 停售）。</p>
+    </div>
+  </section>
+
+  <!-- ============ 中奖查询 ============ -->
+  <section class="panel" id="check" data-sec="check">
+    <div class="panel-head"><h2>🎯 中奖查询（2026 新规）</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
+    <div class="panel-body">
+      <p class="rules-note">输入你购买的号码（支持复式多选），对照最新一期或指定期号开奖，按 2026 新规 7 奖级自动判定中奖注数与奖金；固定奖按当期开奖前奖池是否 ≥8 亿自动选择升级档。输入会自动保存，下次打开直接可用。</p>
+      <div class="check-form">
+        <label>前区号码（1–35，空格/逗号分隔，5~12 个）
+          <input type="text" id="ckFront" placeholder="例如：01 05 06 22 29 30 33" autocomplete="off"></label>
+        <label>后区号码（1–12，空格/逗号分隔，2~6 个）
+          <input type="text" id="ckBack" placeholder="例如：02 07 10 12" autocomplete="off"></label>
+        <label>期号（留空 = 最新一期）
+          <input type="text" id="ckTerm" placeholder="例如：26098" autocomplete="off"></label>
+        <label class="ck-extra"><input type="checkbox" id="ckAppend"> 追加投注（每注 +1 元，中一/二等奖多得 80% 奖金）</label>
+        <div class="ck-tools">
+          <button class="btn btn-primary" id="btnCheck">🎯 判定中奖</button>
+          <button class="btn btn-ghost" id="btnCheckRandom" title="随机生成一注（5+2）填入上方输入框">🎲 随机填号</button>
+          <button class="btn btn-ghost" id="btnCheckClear" title="清空输入">清空</button>
+        </div>
+      </div>
+      <div id="ckResult"></div>
+      <h3 style="margin-top:16px;">🕘 最近查询</h3>
+      <div id="ckHistory"></div>
+    </div>
+  </section>
+
+  <!-- ============ 玩法规则 ============ -->
   <section class="panel" id="rules" data-sec="rules">
     <div class="panel-head"><h2>📜 玩法规则（2026 新规）</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
     <div class="panel-body">
@@ -361,64 +136,27 @@ tr.rec-open td{background:#fdf6ec;}
           <tr><td>七等奖</td><td>3+0、1+2、2+1、0+2</td><td>5 元</td><td class="up">7 元</td></tr>
         </tbody>
       </table>
-      <p class="rules-note">📌 <b>追加投注</b>：基本投注 2 元基础上加 1 元，中一、二等奖可多得 80% 奖金。号码范围不变：前区 01–35 选 5，后区 01–12 选 2。当前奖池已连续多期超过 8 亿元，固定奖按升级档兑付（如七等奖实兑 7 元）。</p>
+      <p class="rules-note">📌 <b>追加投注</b>：基本投注 2 元基础上加 1 元，中一、二等奖可多得 80% 奖金。号码范围不变：前区 01–35 选 5，后区 01–12 选 2。2026 年 2 月 2 日之前的期次适用旧规则（9 奖级），历史公告按原始奖级名称展示。</p>
     </div>
   </section>
 
-  <section class="panel" id="check" data-sec="check">
-    <div class="panel-head"><h2>🎯 中奖查询（2026 新规）</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
-    <div class="panel-body">
-      <p class="rules-note">输入你购买的号码（支持复式多选），对照最新一期（或指定期号）开奖，按 2026 新规 7 奖级自动判定中奖注数与奖金；固定奖按当期奖池是否≥8亿自动选择升级档。</p>
-      <div class="check-form">
-        <label>前区号码（1–35，空格/逗号分隔，5~12 个）
-          <input type="text" id="ckFront" placeholder="例如：01 05 06 22 29 30 33"></label>
-        <label>后区号码（1–12，空格/逗号分隔，2~6 个）
-          <input type="text" id="ckBack" placeholder="例如：02 07 10 12"></label>
-        <label>期号（留空 = 最新一期）
-          <input type="text" id="ckTerm" placeholder="例如：26092"></label>
-        <label class="ck-extra"><input type="checkbox" id="ckAppend"> 追加投注（每注 +1 元，中一/二等奖多得 80% 奖金）</label>
-        <div class="ck-tools">
-          <button class="btn btn-primary" id="btnCheck">🎯 判定中奖</button>
-          <button class="btn btn-ghost" id="btnCheckRandom" title="随机生成一注（5+2）填入上方输入框">🎲 随机填号</button>
-          <button class="btn btn-ghost" id="btnCheckClear" title="清空输入">清空</button>
-        </div>
-      </div>
-      <div id="ckResult"></div>
-    </div>
-  </section>
-
-  <section class="cards" id="overview" data-sec="overview"></section>
-
-  <section class="panel" id="latest" data-sec="latest">
-    <div class="panel-head"><h2>🕒 最新一期开奖</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
-    <div class="panel-body">
-      <div class="latest" id="latestDraw"></div>
-      <div class="latest-extra" id="latestExtra"></div>
-      <div class="stale-note" id="staleNote" hidden></div>
-      <h3 style="margin-top:16px;">🏆 开奖公告（本期各奖级中奖注数与单注奖金）</h3>
-      <div id="latestAnnounce"></div>
-      <p class="rules-note">数据来源：中国体育彩票官网开奖公告；奖池为当期开奖后滚存金额，作为下一期奖池。开奖时间为每周一、三、六 21:25（当日 21:00 停售）。</p>
-    </div>
-  </section>
-
+  <!-- ============ 奖池走势 ============ -->
   <section class="panel" id="pooltrend" data-sec="pooltrend">
-    <div class="panel-head"><h2>💰 奖池走势（每期开奖后滚存）</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
+    <div class="panel-head"><h2>💰 奖池与销量走势</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
     <div class="panel-body">
       <div class="cards" id="poolCards"></div>
-      <div class="toolbar" id="poolRangeBar" style="margin-top:14px;">
-        <span>显示范围：</span>
-        <label><input type="radio" name="poolRange" value="all" checked> 全部</label>
-        <label><input type="radio" name="poolRange" value="500"> 最近500期</label>
-        <label><input type="radio" name="poolRange" value="200"> 最近200期</label>
-        <label><input type="radio" name="poolRange" value="100"> 最近100期</label>
+      <div class="chart-box" style="margin-top:14px;"><canvas id="chartPool" height="280"></canvas><div class="chart-tip"></div></div>
+      <div class="chart-grid">
+        <div class="chart-box"><h3>奖池档位分布（每 1 亿一档）</h3><canvas id="chartPoolHist" height="230"></canvas><div class="chart-tip"></div></div>
+        <div class="chart-box"><h3>销量走势（亿元）</h3><canvas id="chartSales" height="230"></canvas><div class="chart-tip"></div></div>
       </div>
-      <div class="chart-box" style="margin-top:8px;"><canvas id="chartPool" height="280"></canvas><div class="chart-tip"></div></div>
-      <p class="rules-note">红色虚线为 8 亿元升级线：当奖池达到或超过 8 亿元时，三至七等奖固定奖金按升级档兑付（如七等奖 7 元）。早期部分期次官网未公布奖池与销量数据，图中按 0 显示，统计时已剔除。</p>
+      <p class="rules-note">红色虚线为 8 亿元升级线：奖池达到或超过 8 亿元时，三至七等奖固定奖金按升级档兑付（如七等奖 7 元）。早期部分期次官网未公布奖池与销量数据，图中按 0 显示，统计时已剔除。</p>
     </div>
   </section>
 
+  <!-- ============ 号码走势图 ============ -->
   <section class="panel" id="trend" data-sec="trend">
-    <div class="panel-head"><h2>📋 号码走势图（近 N 期 · 点击号码查看统计）</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
+    <div class="panel-head"><h2>📋 号码走势图（点击号码查看统计）</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
     <div class="panel-body">
       <div class="toolbar" id="trendRangeBar">
         <span>显示期数：</span>
@@ -426,7 +164,8 @@ tr.rec-open td{background:#fdf6ec;}
         <button class="btn btn-primary btn-sm" data-r="30">近30期</button>
         <button class="btn btn-ghost btn-sm" data-r="50">近50期</button>
         <button class="btn btn-ghost btn-sm" data-r="100">近100期</button>
-        <span style="color:var(--muted); margin-left:6px;">数字为当期开出的号码，空白格为未开出；点击任意号码可在下方查看其详细统计。</span>
+        <span class="sep"></span>
+        <label><input type="checkbox" id="trendOmit"> 显示遗漏数（未开出格内数字为当时已遗漏期数）</label>
       </div>
       <div class="trend-block">
         <h3>前区 01–35（最新一期在上）</h3>
@@ -440,6 +179,7 @@ tr.rec-open td{background:#fdf6ec;}
     </div>
   </section>
 
+  <!-- ============ 频率 ============ -->
   <section class="panel" id="freq" data-sec="freq">
     <div class="panel-head"><h2>📊 号码出现频率</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
     <div class="panel-body">
@@ -454,24 +194,47 @@ tr.rec-open td{background:#fdf6ec;}
     </div>
   </section>
 
+  <!-- ============ 遗漏 ============ -->
+  <section class="panel" id="omit" data-sec="omit">
+    <div class="panel-head"><h2>⏳ 遗漏分析（点击表头排序）</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
+    <div class="panel-body">
+      <h3>前区号码 01–35</h3>
+      <div class="table-wrap"><table id="omitFrontTable"></table></div>
+      <h3>后区号码 01–12</h3>
+      <div class="table-wrap"><table id="omitBackTable"></table></div>
+      <p class="rules-note">「回补压力」= 当前遗漏 ÷ 平均遗漏，数值越大表示该号码比平时更久未出；「遗漏标准差」越小说明该号码的出号间隔越规律。</p>
+    </div>
+  </section>
+
+  <!-- ============ 和值 ============ -->
   <section class="panel" id="sum" data-sec="sum">
     <div class="panel-head"><h2>📈 前区和值走势（红=每期和值，橙=20期均线，蓝=50期均线）</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
     <div class="panel-body">
-      <div class="toolbar" id="sumRangeBar">
-        <span>显示范围：</span>
-        <label><input type="radio" name="sumRange" value="all" checked> 全部</label>
-        <label><input type="radio" name="sumRange" value="1000"> 最近1000期</label>
-        <label><input type="radio" name="sumRange" value="500"> 最近500期</label>
-        <label><input type="radio" name="sumRange" value="200"> 最近200期</label>
-        <label><input type="radio" name="sumRange" value="100"> 最近100期</label>
-      </div>
       <div class="chart-box"><canvas id="chartSum" height="280"></canvas><div class="chart-tip"></div></div>
       <div class="chart-grid">
         <div class="chart-box"><h3>和值档位分布（每 5 点和值一档）</h3><canvas id="chartSumHist" height="230"></canvas><div class="chart-tip"></div></div>
+        <div class="chart-box"><h3>和值区间占比（与理论分布对比）</h3><div id="sumZoneList"></div></div>
       </div>
     </div>
   </section>
 
+  <!-- ============ 跨度与龙头凤尾 ============ -->
+  <section class="panel" id="span" data-sec="span">
+    <div class="panel-head"><h2>📏 跨度与龙头凤尾</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
+    <div class="panel-body">
+      <div class="mini-stats" id="spanStats"></div>
+      <div class="chart-grid">
+        <div class="chart-box"><h3>前区跨度分布（最大号 − 最小号）</h3><canvas id="chartSpanHist" height="230"></canvas><div class="chart-tip"></div></div>
+        <div class="chart-box"><h3>跨度走势（含 20 期均线）</h3><canvas id="chartSpanTrend" height="230"></canvas><div class="chart-tip"></div></div>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-box"><h3>龙头（前区最小号）出现次数</h3><div id="headList"></div></div>
+        <div class="chart-box"><h3>凤尾（前区最大号）出现次数</h3><div id="tailList"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 结构分布 ============ -->
   <section class="panel" id="dist" data-sec="dist">
     <div class="panel-head"><h2>📐 结构分布</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
     <div class="panel-body">
@@ -481,25 +244,65 @@ tr.rec-open td{background:#fdf6ec;}
       </div>
       <div class="chart-grid">
         <div class="chart-box"><h3>三区分布（平均每期个数：一区01-12 / 二区13-24 / 三区25-35）</h3><canvas id="chartZone" height="230"></canvas><div class="chart-tip"></div></div>
+        <div class="chart-box"><h3>最常见三区形态 TOP8</h3><div id="zonePatternList"></div></div>
       </div>
     </div>
   </section>
 
-  <section class="panel" id="omit" data-sec="omit">
-    <div class="panel-head"><h2>⏳ 遗漏分析（点击表头可排序）</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
+  <!-- ============ 重号 / 邻号 / 同尾 ============ -->
+  <section class="panel" id="repeat" data-sec="repeat">
+    <div class="panel-head"><h2>🔁 重号 · 邻号 · 同尾</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
     <div class="panel-body">
-      <h3>前区号码 01–35</h3>
-      <div class="table-wrap"><table id="omitFrontTable"></table></div>
-      <h3>后区号码 01–12</h3>
-      <div class="table-wrap"><table id="omitBackTable"></table></div>
+      <p class="rules-note">重号 = 与上一期前区相同的号码个数；邻号 = 与上一期前区号码相差 1 的号码个数；同尾 = 本期前区内末位数字相同的号码个数。</p>
+      <div class="mini-stats" id="repeatStats"></div>
+      <div class="chart-grid">
+        <div class="chart-box"><h3>每期重号个数分布</h3><canvas id="chartRepeatDist" height="210"></canvas><div class="chart-tip"></div></div>
+        <div class="chart-box"><h3>每期邻号个数分布</h3><canvas id="chartNeighborDist" height="210"></canvas><div class="chart-tip"></div></div>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-box"><h3>同尾号个数分布</h3><canvas id="chartTailGroup" height="210"></canvas><div class="chart-tip"></div></div>
+        <div class="chart-box"><h3>最近 20 期重号 / 邻号明细</h3><div id="repeatRecent"></div></div>
+      </div>
     </div>
   </section>
 
+  <!-- ============ 012路 / AC值 / 尾数 ============ -->
+  <section class="panel" id="mod3" data-sec="mod3">
+    <div class="panel-head"><h2>🧮 012 路 · AC 值 · 尾数</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
+    <div class="panel-body">
+      <div class="mini-stats" id="mod3Stats"></div>
+      <div class="chart-grid">
+        <div class="chart-box"><h3>012 路形态 TOP8（除 3 余 0 : 余 1 : 余 2 的个数）</h3><div id="mod3List"></div></div>
+        <div class="chart-box"><h3>AC 值分布（离散度：不同差值个数 − 4）</h3><canvas id="chartAc" height="210"></canvas><div class="chart-tip"></div></div>
+      </div>
+      <div class="chart-grid one">
+        <div class="chart-box"><h3>尾数出现次数（前区柱状，悬停可见后区次数，末位 0–9）</h3><canvas id="chartTailOcc" height="220"></canvas><div class="chart-tip"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 后区专项 ============ -->
+  <section class="panel" id="backzone" data-sec="backzone">
+    <div class="panel-head"><h2>🎱 后区专项分析</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
+    <div class="panel-body">
+      <div class="mini-stats" id="backStats"></div>
+      <div class="chart-grid">
+        <div class="chart-box"><h3>后区和值分布（两码之和）</h3><canvas id="chartBackSumHist" height="210"></canvas><div class="chart-tip"></div></div>
+        <div class="chart-box"><h3>后区跨度分布（两码之差）</h3><canvas id="chartBackSpanHist" height="210"></canvas><div class="chart-tip"></div></div>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-box"><h3>后区和值走势（含 20 / 50 期均线）</h3><canvas id="chartBackSumTrend" height="240"></canvas><div class="chart-tip"></div></div>
+        <div class="chart-box"><h3>后区号码频率</h3><canvas id="chartBackFreq2" height="240"></canvas><div class="chart-tip"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 号码热度矩阵 ============ -->
   <section class="panel" id="matrix" data-sec="matrix">
     <div class="panel-head"><h2>🎯 号码热度矩阵（点击号码查看详情）</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
     <div class="panel-body">
       <div class="matrix-block">
-        <h3>前区 01–35</h3>
+        <h3>前区 01–35（颜色越深出现越多）</h3>
         <div class="ball-grid" id="frontGrid"></div>
       </div>
       <div class="matrix-block">
@@ -510,6 +313,26 @@ tr.rec-open td{background:#fdf6ec;}
     </div>
   </section>
 
+  <!-- ============ 共现热力图 ============ -->
+  <section class="panel" id="cooccur" data-sec="cooccur">
+    <div class="panel-head"><h2>🔥 号码共现热力图（前区两两同现次数）</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
+    <div class="panel-body">
+      <p class="rules-note">格内数字为该对号码在同一期出现的次数；颜色表示<b>相对理论期望的偏离</b>——偏蓝表示同现少于期望，偏红表示多于期望（因此颜色深浅与出现次数多少无关，而是与「该不该这么多」有关）。悬停查看「同现次数 / 理论期望 / 倍数」。任一号码对的理论期望为 <b id="coExpected">—</b> 次（每期 5 个号码的固定概率）。</p>
+      <div class="heat-box"><canvas id="heatCooccur"></canvas><div class="chart-tip"></div></div>
+      <div class="heat-legend">
+        <span>低于期望</span>
+        <i style="background:#2f6fd6"></i><i style="background:#7fa4e0"></i><i style="background:#c9dbf5"></i>
+        <i style="background:#f2f4f8"></i>
+        <i style="background:#f4b1b1"></i><i style="background:#e55d5d"></i><i style="background:#c22a2a"></i>
+        <span>高于期望</span>
+        <span class="heat-note">（格内数字只标注显著偏离期望的号码对）</span>
+      </div>
+      <h3>同现最多的号码组合 TOP10</h3>
+      <div id="coTopList"></div>
+    </div>
+  </section>
+
+  <!-- ============ 组合 ============ -->
   <section class="panel" id="combo" data-sec="combo">
     <div class="panel-head"><h2>🔗 高频组合与连号</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
     <div class="panel-body">
@@ -519,11 +342,27 @@ tr.rec-open td{background:#fdf6ec;}
       </div>
       <div class="chart-grid">
         <div class="chart-box"><h3>后区两码组合 TOP15</h3><ul class="rank-list" id="backPairs"></ul></div>
-        <div class="chart-box"><h3>连号统计</h3><div id="consecStats" style="font-size:13.5px;color:#4a5160;"></div></div>
+        <div class="chart-box"><h3>连号统计</h3><div id="consecStats"></div></div>
       </div>
     </div>
   </section>
 
+  <!-- ============ 奖金与返奖率 ============ -->
+  <section class="panel" id="prize" data-sec="prize">
+    <div class="panel-head"><h2>🏆 奖金与返奖率</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
+    <div class="panel-body">
+      <div class="mini-stats" id="prizeStats"></div>
+      <div class="chart-grid">
+        <div class="chart-box"><h3>一等奖单注奖金走势（近 200 期，万元）</h3><canvas id="chartJackpot" height="240"></canvas><div class="chart-tip"></div></div>
+        <div class="chart-box"><h3>返奖率走势（近 200 期 · 当期派奖总额 ÷ 销量）</h3><canvas id="chartPayout" height="240"></canvas><div class="chart-tip"></div></div>
+      </div>
+      <h3>各奖级累计统计（当前统计范围内的开奖公告）</h3>
+      <div class="table-wrap"><table id="prizeLevelTable"></table></div>
+      <p class="rules-note">返奖率为近似值：按官网公告的各奖级「中奖注数 × 单注奖金」求和后除以当期销量，未计入调节基金与派奖活动细节；2026 年 2 月 2 日之前的期次为旧规则奖级。</p>
+    </div>
+  </section>
+
+  <!-- ============ 模拟选号 ============ -->
   <section class="panel" id="pick" data-sec="pick">
     <div class="panel-head"><h2>🎲 模拟选号（仅供娱乐）</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
     <div class="panel-body">
@@ -535,10 +374,11 @@ tr.rec-open td{background:#fdf6ec;}
         <button class="btn btn-ghost" id="btnCopy">📋 复制结果</button>
       </div>
       <div id="pickResult"></div>
-      <div class="hint">每次生成 5 注。热号策略按历史出现频次加权抽取；遗漏策略优先抽取长期未出的号码；均衡策略兼顾奇偶、大小与和值区间。</div>
+      <div class="hint">每次生成 5 注。热号策略按历史出现频次加权抽取；遗漏策略优先抽取长期未出的号码；均衡策略兼顾奇偶、大小与和值区间。统计范围切换后，策略所用的频次 / 遗漏也随之变化。</div>
     </div>
   </section>
 
+  <!-- ============ 预测 ============ -->
   <section class="panel" id="predict" data-sec="predict">
     <div class="panel-head"><h2>🔮 下一期号码预测（7 种方法 · 仅供娱乐）</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
     <div class="panel-body">
@@ -550,7 +390,8 @@ tr.rec-open td{background:#fdf6ec;}
         <button class="btn btn-ghost" data-m="follow">转移跟随</button>
         <button class="btn btn-ghost" data-m="hotcold">冷热混合</button>
         <button class="btn btn-ghost" data-m="sumrange">和值区间</button>
-        <button class="btn btn-ghost" id="btnBacktest" title="用最近100期逐期回测各方法命中率，对照纯随机基准">📈 近100期回测</button>
+        <span class="sep"></span>
+        <button class="btn btn-ghost" id="btnBacktest" title="用最近 100 期逐期回测各方法命中率，对照纯随机基准">📈 近100期回测</button>
       </div>
       <div class="pred-desc" id="predDesc"></div>
       <div class="chart-grid">
@@ -570,11 +411,12 @@ tr.rec-open td{background:#fdf6ec;}
     </div>
   </section>
 
+  <!-- ============ 历史记录 ============ -->
   <section class="panel" id="records" data-sec="records">
     <div class="panel-head"><h2>🗂️ 历史开奖记录（最新在前）</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
     <div class="panel-body">
       <div class="toolbar">
-        <input type="search" id="searchIssue" placeholder="搜索期号或开奖日期，如 26093 / 2026-08-17（快捷键 /）">
+        <input type="search" id="searchIssue" placeholder="搜索期号或开奖日期，如 26098 / 2026-08-29（快捷键 /）">
         <select id="recordCount">
           <option value="50" selected>每页50条</option>
           <option value="100">每页100条</option>
@@ -590,10 +432,11 @@ tr.rec-open td{background:#fdf6ec;}
     </div>
   </section>
 
+  <!-- ============ 赞赏 ============ -->
   <section class="panel" id="donate" data-sec="donate">
     <div class="panel-head"><h2>☕ 赞赏支持</h2><button class="panel-toggle" title="折叠 / 展开">▾</button></div>
     <div class="panel-body">
-      <p style="margin:0 0 10px; font-size:13.5px; color:#555; line-height:1.8;">如果这个工具对你有帮助，欢迎扫码赞赏支持一下作者。完全自愿，不赞赏也不影响任何功能使用 😊</p>
+      <p style="margin:0 0 10px; font-size:13.5px; color:var(--muted); line-height:1.8;">如果这个工具对你有帮助，欢迎扫码赞赏支持一下作者。完全自愿，不赞赏也不影响任何功能使用 😊</p>
       <img src="赞赏码.jpg" alt="赞赏码" loading="lazy" style="width:220px; max-width:100%; display:block; border-radius:10px; border:1px solid var(--line);">
     </div>
   </section>
@@ -601,10 +444,14 @@ tr.rec-open td{background:#fdf6ec;}
 
 <footer>
   <b>⚠️ 免责声明：</b>本页面为历史开奖数据的统计展示，仅供学习与娱乐参考。彩票开奖为独立随机事件，任何号码组合的中奖概率均相同，历史频率、遗漏等指标不构成对未来的预测，请理性购彩、量力而行。
-  <p style="margin-top:8px;">💡 数据说明：全部历史数据存放于同目录 <b>data.js</b>（含每期奖池、销量与开奖公告）；点击顶部「🔄 在线更新」可直接从中国体育彩票官网接口拉取最新开奖（增量更新），自动缓存于浏览器本地；「💾 更新并写入数据文件」可把结果写回 data.js；「恢复内置」可清除缓存。图表悬停可查看数值，面板标题可折叠，开奖记录行可点击展开公告。</p>
+  <p style="margin-top:8px;">💡 数据说明：全部历史数据存放于同目录 <b>data.js</b>（含每期奖池、销量与开奖公告）；「🔄 在线更新」增量拉取官网最新开奖并缓存到浏览器本地，「💾 写入数据文件」写回 data.js，「恢复内置」清除缓存。统计引擎、图表、中奖查询分模块位于 <b>js/</b> 目录。</p>
 </footer>
 
 <script defer src="data.js"></script>
-<script defer src="app.js"></script>
+<script defer src="js/dlt-shared.js"></script>
+<script defer src="js/dlt-core.js"></script>
+<script defer src="js/dlt-charts.js"></script>
+<script defer src="js/dlt-check.js"></script>
+<script defer src="js/dlt-app.js"></script>
 </body>
 </html>
