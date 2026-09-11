@@ -242,23 +242,69 @@
     return { rows: rows, added: rows.length - existing.length, fullList: fullList };
   }
 
+  // Pages 模式下从同源加载最新 data.js（由 GitHub Action 定时更新），绕开 CORS
+  function loadLatestDataJs() {
+    return new Promise(function (resolve, reject) {
+      var script = document.createElement('script');
+      script.src = 'data.js?t=' + Date.now();
+      var done = false;
+      script.onload = function () {
+        if (done) return;
+        done = true;
+        if (script.parentNode) script.parentNode.removeChild(script);
+        if (!window.RAW_DATA || !window.RAW_DATA.length) { reject(new Error('data.js 数据为空')); return; }
+        resolve(window.RAW_DATA);
+      };
+      script.onerror = function () {
+        if (done) return;
+        done = true;
+        if (script.parentNode) script.parentNode.removeChild(script);
+        reject(new Error('data.js 加载失败'));
+      };
+      document.head.appendChild(script);
+      setTimeout(function () {
+        if (done) return;
+        done = true;
+        if (script.parentNode) script.parentNode.removeChild(script);
+        reject(new Error('data.js 加载超时'));
+      }, 15000);
+    });
+  }
+
   async function doUpdate() {
     if (btnBusy) return;
     btnBusy = true;
-    setUpdateUI(true, 2, '正在连接中国体育彩票官网…');
+    setUpdateUI(true, 2, IS_LOCAL ? '正在连接中国体育彩票官网…' : '正在获取最新数据…');
     try {
-      var res = await fetchAndMerge();
-      if (res.empty) { toast('✅ 已是最新：第 ' + state.rows[0][0] + ' 期（' + state.rows[0][1] + '），无需更新', true); return; }
+      var rows, added;
+      if (IS_LOCAL) {
+        // 本地模式：通过本地服务器代理从体彩官网增量拉取
+        var res = await fetchAndMerge();
+        if (res.empty) { toast('✅ 已是最新：第 ' + state.rows[0][0] + ' 期（' + state.rows[0][1] + '），无需更新', true); return; }
+        rows = res.rows;
+        added = res.added;
+      } else {
+        // Pages 模式：从同源加载最新 data.js（GitHub Action 每次开奖后自动更新）
+        var latest = await loadLatestDataJs();
+        var curLatest = String((state.rows[0] && state.rows[0][0]) || '');
+        var newLatest = String((latest[0] && latest[0][0]) || '');
+        if (newLatest <= curLatest) {
+          toast('✅ 已是最新：第 ' + state.rows[0][0] + ' 期（' + state.rows[0][1] + '），无需更新', true);
+          return;
+        }
+        rows = latest;
+        added = latest.length - state.rows.length;
+      }
       var now = Date.now();
-      setData(res.rows, { source: 'online', fetchedAt: now });
-      writeCache(res.rows, now);
-      toast('✅ 新增 ' + res.added + ' 期，已更新至第 ' + res.rows[0][0] + ' 期（' + res.rows[0][1] + '），共 ' + res.rows.length + ' 期，已缓存到本地', true);
+      setData(rows, { source: IS_LOCAL ? 'online' : 'builtin', fetchedAt: now });
+      writeCache(rows, now);
+      toast('✅ ' + (added > 0 ? '新增 ' + added + ' 期，' : '') + '已更新至第 ' + rows[0][0] + ' 期（' + rows[0][1] + '），共 ' + rows.length + ' 期', true);
     } catch (e) {
       var msg = e.message;
       if (e instanceof TypeError || /failed to fetch/i.test(msg) || /所有 CORS 代理均不可用/i.test(msg)) {
         msg = IS_LOCAL
           ? '浏览器禁止 file:// 页面跨域请求。请通过「启动页面.bat」打开本页（本地服务器模式）后再点在线更新'
-          : '网络请求失败（体彩官网接口或公共 CORS 代理暂时不可用），请稍后重试；数据仍以 data.js 内置为准';
+          : '网络请求失败，请稍后重试；数据仍以 data.js 内置为准';
       }
       toast('❌ 更新失败：' + msg, false);
     } finally {
@@ -595,8 +641,7 @@
     for (i = 1; i <= BACK_MAX; i++) { bl.push(pad2(i)); bv.push(S.backFreq[i]); }
     Charts.register($('chartBackFreq'), function () {
       Charts.bar($('chartBackFreq'), {
-        labels: bl, values: bv, valueTop: true,
-        tipFmt: function (v) { return v + ' 次（' + (v / S.n * 100).toFixed(2) + '%）'; },
+        labels: bl, values: bv, valueTop: true, tipFmt: function (v) { return v + ' 次（' + (v / S.n * 100).toFixed(2) + '%）'; },
         colors: function (idx) { return idx < 3 ? '#1f56b0' : '#6f9ce0'; }
       });
     });
@@ -1489,10 +1534,23 @@
     setData(initial.rows, initial.meta);
     renderPicks('random');
 
-    // 静默检查新数据：只拉最新一页（12 小时内刚更新过则跳过）
+    // 静默检查新数据：Pages 模式对比最新 data.js，本地模式通过代理拉最新一页
     function autoCheckNew() {
       if (location.protocol === 'file:') return;
       if (state.meta.source === 'cache' && state.meta.fetchedAt && Date.now() - state.meta.fetchedAt < 12 * 3600 * 1000) return;
+      if (!IS_LOCAL) {
+        // Pages：加载最新 data.js 对比期号
+        loadLatestDataJs().then(function (latest) {
+          var curLatest = String((state.rows[0] && state.rows[0][0]) || '');
+          var newLatest = String((latest[0] && latest[0][0]) || '');
+          if (newLatest <= curLatest) return;
+          var added = latest.length - state.rows.length;
+          toast('发现 ' + added + ' 期新数据（可更新至第 ' + newLatest + ' 期）', null,
+            { label: '立即更新', onClick: doUpdate });
+        }).catch(function () { /* 静默失败 */ });
+        return;
+      }
+      // 本地模式：通过本地服务器代理拉取最新一页
       var existingSet = {};
       state.rows.forEach(function (r) { existingSet[r[0]] = true; });
       fetchAllFromApi(existingSet, null, 1).then(function (res) {
@@ -1516,3 +1574,4 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
+//（注：内容由AI生成）
