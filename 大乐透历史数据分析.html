@@ -29,7 +29,7 @@
           <option value="50">近 50 期</option>
         </select>
       </label>
-      <button class="btn btn-primary" id="btnUpdate" title="从中国体育彩票官网接口增量拉取最新开奖并缓存到本地">🔄 在线更新</button>
+      <button class="btn btn-primary" id="btnUpdate" title="直连中国体育彩票官网增量拉取最新开奖并缓存到浏览器本地">🔄 在线更新</button>
       <button class="btn btn-primary" id="btnSaveData" title="抓取最新数据并写回同目录 data.js（需通过本地服务器打开）">💾 写入数据文件</button>
       <button class="btn btn-ghost" id="btnReset" title="清除本地缓存，恢复使用 data.js 内置数据">恢复内置</button>
       <button class="btn btn-ghost icon-btn" id="btnTheme" title="切换深色 / 浅色主题">🌙</button>
@@ -74,7 +74,7 @@
 <header class="hero" id="top">
   <h1>🎱 大乐透历史开奖数据分析</h1>
   <p id="heroSub">数据加载中…</p>
-  <p class="hero-note">顶部「统计范围」可一键切换全历史 / 近 N 期，所有图表与统计会即时重算；图表悬停查看数值，号码矩阵与走势图点击号码可查看详情；「🔄 在线更新」增量拉取官网数据，「💾 写入数据文件」写回 data.js。</p>
+  <p class="hero-note">顶部「统计范围」可一键切换全历史 / 近 N 期，所有图表与统计会即时重算；图表悬停查看数值，号码矩阵与走势图点击号码可查看详情；「🔄 在线更新」直连官网增量拉取最新开奖（仅拉缺失期次），「💾 写入数据文件」写回 data.js（需本地服务器）。</p>
 </header>
 
 <main>
@@ -444,7 +444,7 @@
 
 <footer>
   <b>⚠️ 免责声明：</b>本页面为历史开奖数据的统计展示，仅供学习与娱乐参考。彩票开奖为独立随机事件，任何号码组合的中奖概率均相同，历史频率、遗漏等指标不构成对未来的预测，请理性购彩、量力而行。
-  <p style="margin-top:8px;">💡 数据说明：全部历史数据存放于同目录 <b>data.js</b>（含每期奖池、销量与开奖公告）；「🔄 在线更新」增量拉取官网最新开奖并缓存到浏览器本地，「💾 写入数据文件」写回 data.js，「恢复内置」清除缓存。统计引擎、图表、中奖查询分模块位于 <b>js/</b> 目录。</p>
+  <p style="margin-top:8px;">💡 数据说明：全部历史数据存放于同目录 <b>data.js</b>（含每期奖池、销量与开奖公告）；「🔄 在线更新」<b>直连体彩官网</b>增量拉取最新开奖并缓存到浏览器本地（官网不可用时自动改用仓库已同步的数据），「💾 写入数据文件」写回 data.js（仅本地服务器模式），「恢复内置」清除缓存。统计引擎、图表、中奖查询分模块位于 <b>js/</b> 目录。</p>
 </footer>
 
 <script defer src="data.js"></script>

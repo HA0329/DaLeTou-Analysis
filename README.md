@@ -44,15 +44,21 @@
 - **PWA 离线可用**：注册 Service Worker，断网时仍可查看已缓存页面（网络优先策略，联网时永远取最新数据）
 - **零依赖**：无 npm 依赖、无构建步骤、无 CDN 外链
 
-### 🔄 数据更新（三条路径，结果一致）
+### 🔄 数据更新（四条路径，结果一致）
 
 | 方式 | 说明 |
 | --- | --- |
-| 页面「🔄 在线更新」 | 浏览器内增量抓取，结果缓存到 `localStorage` |
-| 页面「💾 写入数据文件」 | 抓取后由本地服务器写回 `data.js`（自动备份 + 原子替换） |
+| 页面「🔄 在线更新」 | **直连体彩官网**增量抓取实时开奖，结果缓存到 `localStorage`；官网不可用时自动退回同源 `data.js` |
+| 页面「💾 写入数据文件」 | 抓取后由本地服务器写回 `data.js`（自动备份 + 原子替换），仅本地服务器模式可用 |
 | 命令行 `node update.js` | 增量更新（`--full` 全量重建，`--check` 只检查不写入） |
+| GitHub Actions 定时任务 | 每周一/三/六开奖后自动运行 `node update.js` 并提交 `data.js` |
 
-三条路径共用 `js/dlt-shared.js` 的转换与校验逻辑，都会：按期号去重合并 → 全量校验（期号唯一/降序、号码范围与升序、奖池销量与公告结构）→ 才允许写入。
+四条路径共用 `js/dlt-shared.js` 的转换与校验逻辑，都会：按期号去重合并 → 全量校验（期号唯一/降序、号码范围与升序、奖池销量与公告结构）→ 才允许写入。
+
+> **关于线上（GitHub Pages）的实时性**
+> 体彩官网接口响应带 `Access-Control-Allow-Origin: *`，浏览器可以**直接从 Pages 页面**发起跨域请求，
+> 因此页面上的「🔄 在线更新」拿到的就是官网实时数据，不依赖任何第三方代理，也不依赖 GitHub Action 是否跑过。
+> GitHub Action 的作用是让仓库里的 `data.js` 也保持最新，作为官网不可用时的兜底数据源。
 
 ---
 
@@ -74,7 +80,9 @@ PORT=9000 node server.js # 自定义端口
 
 > **为什么要本地服务器？**
 > 浏览器禁止 `file://` 页面发起跨域 fetch，所以直接双击 HTML 时「🔄 在线更新」与「💾 写入数据文件」不可用（页面展示与图表不受影响，数据由同目录 `data.js` 提供）。
-> `server.js` 同时充当体彩官网接口的代理（绕过 CORS / HTTP/2 限制）与 `data.js` 的写回接口，只监听 `127.0.0.1`，仅本机可访问；并对代理参数做白名单校验、对静态资源启用 gzip + ETag。
+> `server.js` 同时充当体彩官网接口的代理（本地场景下统一走同源请求）与 `data.js` 的写回接口，只监听 `127.0.0.1`，仅本机可访问；并对代理参数做白名单校验、对静态资源启用 gzip + ETag。
+>
+> 注意：官网接口本身**允许跨域**（`Access-Control-Allow-Origin: *`），所以部署到 GitHub Pages 等静态站点后，页面无需本地服务器即可直连官网取实时数据；本地服务器存在的意义在于「写回 `data.js`」与 `file://` 兜底。
 
 ### 更新数据
 
@@ -104,7 +112,7 @@ js/dlt-shared.js          通用工具：格式化、HTML 转义、数据转换�
 js/dlt-core.js            统计引擎：纯计算（computeAll / 预测 / 回测），不触碰 DOM，可被单测直接覆盖
 js/dlt-charts.js          轻量 canvas 图表引擎：柱状 / 折线 / 热力图，含 DPR 适配、悬停 tooltip、主题
 js/dlt-check.js           中奖查询（2026 新规 7 奖级，纯计算部分可单测）
-js/dlt-app.js             页面渲染与交互、数据源管理、全局统计范围、在线更新
+js/dlt-app.js             页面渲染与交互、数据源管理、全局统计范围、在线更新（直连官网 + 仓库数据兜底）
 data.js                   历史开奖数据（自动生成，格式 v2）
 server.js                 本地服务器：静态资源 + 官网代理 + data.js 写回 + /health
 update.js                 命令行数据更新脚本
@@ -113,6 +121,7 @@ test/                     node:test 测试套件
 启动页面.bat              Windows 一键启动器
 screenshots/              界面截图（当前版本）
 赞赏码.jpg                赞赏支持二维码
+.github/workflows/        update-data.yml（开奖后自动更新 data.js）、pages.yml（Pages 部署）
 ```
 
 **数据流**：`update.js` / 页面按钮 → 官网接口 → `dlt-shared.js` 转换与校验 → `data.js` → 页面加载 → `dlt-core.js` 统计 → `dlt-charts.js` / `dlt-app.js` 渲染。
