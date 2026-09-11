@@ -133,22 +133,50 @@
     return { rows: window.RAW_DATA, meta: { source: 'builtin', fetchedAt: null } };
   }
 
-  // ---------- 在线数据（经本地服务器代理） ----------
-  var API_BASE = (location.protocol === 'file:' ? 'http://127.0.0.1:8123' : location.origin) + '/dlt-api';
-  var SAVE_URL = (location.protocol === 'file:' ? 'http://127.0.0.1:8123' : location.origin) + '/save-data';
+  // ---------- 在线数据 ----------
+  // 体彩官网真实 API（不支持 CORS，本地模式走本地服务器代理，Pages 模式走公共 CORS 代理）
+  var REAL_API = 'https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry';
+  // 是否本地模式：file:// 或 localhost / 127.0.0.1
+  var IS_LOCAL = location.protocol === 'file:' ||
+    location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  // 本地模式走 /dlt-api 代理；Pages 模式直接用真实 API（由 tryFetch 包 CORS 代理）
+  var API_BASE = IS_LOCAL
+    ? (location.protocol === 'file:' ? 'http://127.0.0.1:8123' : location.origin) + '/dlt-api'
+    : REAL_API;
+  var SAVE_URL = IS_LOCAL
+    ? (location.protocol === 'file:' ? 'http://127.0.0.1:8123' : location.origin) + '/save-data'
+    : null;
+
+  // Pages 环境下的 CORS 代理列表（按顺序尝试，前一个失败自动换下一个）
+  var CORS_PROXIES = [
+    function (u) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
+    function (u) { return 'https://corsproxy.io/?url=' + encodeURIComponent(u); },
+    function (u) { return 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u); }
+  ];
 
   function tryFetch(url, n) {
     var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 20000) : null;
-    return fetch(url, {
-      headers: { 'Accept': 'application/json, text/javascript, */*; q=0.01' },
-      signal: ctrl ? ctrl.signal : undefined
-    }).then(function (res) {
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res.json();
-    }).catch(function (e) {
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 25000) : null;
+    // 本地模式直接请求；Pages 模式依次尝试 CORS 代理
+    var urls = IS_LOCAL ? [url] : CORS_PROXIES.map(function (p) { return p(url); });
+
+    function attempt(idx) {
+      if (idx >= urls.length) return Promise.reject(new Error('所有 CORS 代理均不可用'));
+      return fetch(urls[idx], {
+        headers: { 'Accept': 'application/json, text/javascript, */*; q=0.01' },
+        signal: ctrl ? ctrl.signal : undefined
+      }).then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      }).catch(function (e) {
+        if (idx < urls.length - 1) return attempt(idx + 1);
+        throw e;
+      });
+    }
+
+    return attempt(0).catch(function (e) {
       if (n < 2) {
-        return new Promise(function (r) { setTimeout(r, 600 * (n + 1)); }).then(function () { return tryFetch(url, n + 1); });
+        return new Promise(function (r) { setTimeout(r, 800 * (n + 1)); }).then(function () { return tryFetch(url, n + 1); });
       }
       throw e;
     }).finally(function () { if (timer) clearTimeout(timer); });
@@ -227,8 +255,10 @@
       toast('✅ 新增 ' + res.added + ' 期，已更新至第 ' + res.rows[0][0] + ' 期（' + res.rows[0][1] + '），共 ' + res.rows.length + ' 期，已缓存到本地', true);
     } catch (e) {
       var msg = e.message;
-      if (e instanceof TypeError || /failed to fetch/i.test(msg)) {
-        msg = '浏览器禁止 file:// 页面跨域请求。请通过「启动页面.bat」打开本页（本地服务器模式）后再点在线更新';
+      if (e instanceof TypeError || /failed to fetch/i.test(msg) || /所有 CORS 代理均不可用/i.test(msg)) {
+        msg = IS_LOCAL
+          ? '浏览器禁止 file:// 页面跨域请求。请通过「启动页面.bat」打开本页（本地服务器模式）后再点在线更新'
+          : '网络请求失败（体彩官网接口或公共 CORS 代理暂时不可用），请稍后重试；数据仍以 data.js 内置为准';
       }
       toast('❌ 更新失败：' + msg, false);
     } finally {
@@ -239,6 +269,11 @@
 
   async function doSaveData() {
     if (btnBusy) return;
+    // Pages 是纯静态站，没有后端接口，无法写回 data.js
+    if (!IS_LOCAL) {
+      toast('💡 GitHub Pages 为纯静态站点，无法写回 data.js。请使用「🔄 在线更新」（数据缓存到浏览器本地），或克隆仓库后本地运行「启动页面.bat」再点此按钮', false);
+      return;
+    }
     btnBusy = true;
     setUpdateUI(true, 2, '正在连接中国体育彩票官网…');
     try {
@@ -560,7 +595,8 @@
     for (i = 1; i <= BACK_MAX; i++) { bl.push(pad2(i)); bv.push(S.backFreq[i]); }
     Charts.register($('chartBackFreq'), function () {
       Charts.bar($('chartBackFreq'), {
-        labels: bl, values: bv, valueTop: true, tipFmt: function (v) { return v + ' 次（' + (v / S.n * 100).toFixed(2) + '%）'; },
+        labels: bl, values: bv, valueTop: true,
+        tipFmt: function (v) { return v + ' 次（' + (v / S.n * 100).toFixed(2) + '%）'; },
         colors: function (idx) { return idx < 3 ? '#1f56b0' : '#6f9ce0'; }
       });
     });
