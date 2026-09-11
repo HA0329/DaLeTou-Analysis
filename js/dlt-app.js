@@ -26,6 +26,11 @@
 
   // ---------- 状态 ----------
   var state = { rows: [], meta: {}, range: 0 };
+  // 页面加载时 data.js 的内置数据快照。
+  // 必须在此处固定：loadLatestDataJs() 会重写 window.RAW_DATA，
+  // 若「恢复内置」直接读 window.RAW_DATA，一旦那次加载拿到的是较旧版本，
+  // 用户点「恢复内置」就会把数据倒退回去（缓存更新、内置反而更旧）。
+  var INITIAL_RAW = window.RAW_DATA;
   var S = null;        // 当前统计范围下的统计量
   var SAll = null;     // 全量统计量（用于记录表 / 总量卡片）
   var btnBusy = false;
@@ -134,12 +139,15 @@
   }
 
   // ---------- 在线数据 ----------
-  // 体彩官网真实 API（不支持 CORS，本地模式走本地服务器代理，Pages 模式走公共 CORS 代理）
+  // 体彩官网真实 API。
+  // 关键事实（已实测验证）：该接口响应带 Access-Control-Allow-Origin: *，
+  // 浏览器可以从任意站点（含 GitHub Pages）直接 fetch，无需任何代理。
+  // 唯一限制是必须带 Referer（缺失会被 WAF 返回 567）——浏览器发 XHR 会自动携带且 JS 无法移除，故不构成障碍。
   var REAL_API = 'https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry';
   // 是否本地模式：file:// 或 localhost / 127.0.0.1
   var IS_LOCAL = location.protocol === 'file:' ||
     location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-  // 本地模式走 /dlt-api 代理；Pages 模式直接用真实 API（由 tryFetch 包 CORS 代理）
+  // 本地模式走 /dlt-api 代理（同源，避开 file:// 的跨域限制）；Pages 模式直连官网
   var API_BASE = IS_LOCAL
     ? (location.protocol === 'file:' ? 'http://127.0.0.1:8123' : location.origin) + '/dlt-api'
     : REAL_API;
@@ -147,39 +155,52 @@
     ? (location.protocol === 'file:' ? 'http://127.0.0.1:8123' : location.origin) + '/save-data'
     : null;
 
-  // Pages 环境下的 CORS 代理列表（按顺序尝试，前一个失败自动换下一个）
+  // 公共 CORS 代理 —— 仅在「直连官网失败」时兜底。
+  // 注意：这些免费代理极不稳定（实测 allorigins / codetabs 返回 522、corsproxy.io 返回 401），
+  // 因此只作为最后手段，绝不能当主路径。
   var CORS_PROXIES = [
     function (u) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
     function (u) { return 'https://corsproxy.io/?url=' + encodeURIComponent(u); },
     function (u) { return 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u); }
   ];
 
-  function tryFetch(url, n) {
+  // 单次请求（不重试）。每次尝试独立创建超时计时器，
+  // 避免多个候选地址共用同一个已过期的 AbortSignal 导致后续尝试瞬间失败。
+  function fetchOnce(url) {
     var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 25000) : null;
-    // 本地模式直接请求；Pages 模式依次尝试 CORS 代理
-    var urls = IS_LOCAL ? [url] : CORS_PROXIES.map(function (p) { return p(url); });
+    // 只带 Accept（属于 CORS 安全列表头），保证请求是「简单请求」：
+    // 一旦触发 OPTIONS 预检，官网 WAF 会返回 567，请求必失败。
+    return fetch(url, {
+      headers: { 'Accept': 'application/json, text/javascript, */*; q=0.01' },
+      signal: ctrl ? ctrl.signal : undefined
+    }).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }).finally(function () { if (timer) clearTimeout(timer); });
+  }
 
+  // 取数据：优先直连官网，失败再依次尝试 CORS 代理，最后整体重试
+  function tryFetch(url, n) {
+    var urls = [url];
+    // 本地模式请求的是 server.js 代理（已同源），无需再套公共代理
+    if (!IS_LOCAL) CORS_PROXIES.forEach(function (p) { urls.push(p(url)); });
+
+    var lastErr = null;
     function attempt(idx) {
-      if (idx >= urls.length) return Promise.reject(new Error('所有 CORS 代理均不可用'));
-      return fetch(urls[idx], {
-        headers: { 'Accept': 'application/json, text/javascript, */*; q=0.01' },
-        signal: ctrl ? ctrl.signal : undefined
-      }).then(function (res) {
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        return res.json();
-      }).catch(function (e) {
-        if (idx < urls.length - 1) return attempt(idx + 1);
-        throw e;
+      if (idx >= urls.length) return Promise.reject(lastErr || new Error('所有数据通道均不可用'));
+      return fetchOnce(urls[idx]).catch(function (e) {
+        lastErr = e;
+        return attempt(idx + 1);
       });
     }
 
-    return attempt(0).catch(function (e) {
+    return Promise.resolve().then(function () { return attempt(0); }).catch(function (e) {
       if (n < 2) {
         return new Promise(function (r) { setTimeout(r, 800 * (n + 1)); }).then(function () { return tryFetch(url, n + 1); });
       }
       throw e;
-    }).finally(function () { if (timer) clearTimeout(timer); });
+    });
   }
 
   // 增量抓取：官网列表最新在前，遇到已存在期号即停止（全量约 30 页 → 通常 1 页）
@@ -274,37 +295,46 @@
   async function doUpdate() {
     if (btnBusy) return;
     btnBusy = true;
-    setUpdateUI(true, 2, IS_LOCAL ? '正在连接中国体育彩票官网…' : '正在获取最新数据…');
+    setUpdateUI(true, 2, '正在连接中国体育彩票官网…');
     try {
-      var rows, added;
-      if (IS_LOCAL) {
-        // 本地模式：通过本地服务器代理从体彩官网增量拉取
+      var rows = null, added = 0, via = 'online';
+      var curLatest = String((state.rows[0] && state.rows[0][0]) || '');
+
+      // 第一优先：直连体彩官网，拿到的是真正的实时数据（官网接口带 ACAO:*，浏览器可直连）
+      try {
         var res = await fetchAndMerge();
-        if (res.empty) { toast('✅ 已是最新：第 ' + state.rows[0][0] + ' 期（' + state.rows[0][1] + '），无需更新', true); return; }
+        if (res.empty) {
+          toast('✅ 已是最新：第 ' + state.rows[0][0] + ' 期（' + state.rows[0][1] + '），无需更新', true);
+          return;
+        }
         rows = res.rows;
         added = res.added;
-      } else {
-        // Pages 模式：从同源加载最新 data.js（GitHub Action 每次开奖后自动更新）
+      } catch (apiErr) {
+        // 第二优先：官网不可用时，退回同源 data.js（由 GitHub Action 定时同步，可能略旧）
+        if (IS_LOCAL) throw apiErr;   // 本地模式没有这条退路，直接报错
+        setUpdateUI(true, 30, '官网接口暂时不可用，改用仓库已同步的数据…');
         var latest = await loadLatestDataJs();
-        var curLatest = String((state.rows[0] && state.rows[0][0]) || '');
         var newLatest = String((latest[0] && latest[0][0]) || '');
         if (newLatest <= curLatest) {
           toast('✅ 已是最新：第 ' + state.rows[0][0] + ' 期（' + state.rows[0][1] + '），无需更新', true);
           return;
         }
         rows = latest;
-        added = latest.length - state.rows.length;
+        added = Math.max(0, latest.length - state.rows.length);
+        via = 'repo';
       }
+
       var now = Date.now();
-      setData(rows, { source: IS_LOCAL ? 'online' : 'builtin', fetchedAt: now });
+      setData(rows, { source: via === 'repo' ? 'repo' : 'online', fetchedAt: now });
       writeCache(rows, now);
-      toast('✅ ' + (added > 0 ? '新增 ' + added + ' 期，' : '') + '已更新至第 ' + rows[0][0] + ' 期（' + rows[0][1] + '），共 ' + rows.length + ' 期', true);
+      toast('✅ ' + (added > 0 ? '新增 ' + added + ' 期，' : '') + '已更新至第 ' + rows[0][0] + ' 期（' + rows[0][1] + '），共 ' + rows.length + ' 期' +
+        (via === 'repo' ? '（官网直连失败，取自仓库同步数据）' : ''), true);
     } catch (e) {
       var msg = e.message;
-      if (e instanceof TypeError || /failed to fetch/i.test(msg) || /所有 CORS 代理均不可用/i.test(msg)) {
+      if (e instanceof TypeError || /failed to fetch/i.test(msg) || /均不可用/.test(msg)) {
         msg = IS_LOCAL
           ? '浏览器禁止 file:// 页面跨域请求。请通过「启动页面.bat」打开本页（本地服务器模式）后再点在线更新'
-          : '网络请求失败，请稍后重试；数据仍以 data.js 内置为准';
+          : '无法连接体彩官网，且仓库同步数据不可用。请检查网络后重试；当前仍按已有数据显示';
       }
       toast('❌ 更新失败：' + msg, false);
     } finally {
@@ -317,7 +347,7 @@
     if (btnBusy) return;
     // Pages 是纯静态站，没有后端接口，无法写回 data.js
     if (!IS_LOCAL) {
-      toast('💡 GitHub Pages 为纯静态站点，无法写回 data.js。请使用「🔄 在线更新」（数据缓存到浏览器本地），或克隆仓库后本地运行「启动页面.bat」再点此按钮', false);
+      toast('💡 GitHub Pages 为纯静态站点，无法写回 data.js。点「🔄 在线更新」即可实时获取官网最新开奖并缓存到浏览器本地；若想改写 data.js，请克隆仓库后本地运行「启动页面.bat」', false);
       return;
     }
     btnBusy = true;
@@ -346,19 +376,29 @@
 
   function doReset() {
     clearCache();
-    setData(window.RAW_DATA, { source: 'builtin', fetchedAt: null });
-    toast('已恢复 data.js 内置数据（' + window.RAW_DATA.length + ' 期）', true);
+    setData(INITIAL_RAW, { source: 'builtin', fetchedAt: null });
+    toast('已恢复 data.js 内置数据（' + INITIAL_RAW.length + ' 期，可在联网时点「🔄 在线更新」获取最新）', true);
   }
 
   function updateChip() {
     var m = state.meta, rows = state.rows;
-    var srcName = m.source === 'online' ? '在线数据' : m.source === 'cache' ? '本地缓存' : '内置数据';
+    var srcName = m.source === 'online' ? '官网实时' : m.source === 'repo' ? '仓库同步' :
+      m.source === 'cache' ? '本地缓存' : '内置数据';
     var chip = $('dataChip');
     chip.textContent = srcName + ' · ' + rows.length + ' 期';
-    chip.className = 'data-chip ' + (m.source === 'cache' ? 'cache' : m.source === 'online' ? 'online' : '');
+    chip.className = 'data-chip ' + (m.source === 'cache' ? 'cache' : (m.source === 'online' || m.source === 'repo') ? 'online' : '');
     chip.title = '数据来源：' + srcName + '；最新一期：第 ' + rows[0][0] + ' 期（' + rows[0][1] + '）' +
       (m.fetchedAt ? '；更新时间：' + fmtTime(m.fetchedAt) : '') +
       (state.range ? '；当前统计范围：近 ' + state.range + ' 期' : '；当前统计范围：全部历史');
+  }
+
+  // 按钮提示随环境变化：Pages 上必须让用户知道「在线更新」是真的去官网取实时数据
+  function updateDataSourceHint() {
+    var btn = $('btnUpdate');
+    if (!btn) return;
+    btn.title = IS_LOCAL
+      ? '经本地服务器代理从中国体育彩票官网增量拉取最新开奖'
+      : '直连中国体育彩票官网增量拉取最新开奖（失败时自动改用仓库已同步的数据）';
   }
 
   // ---------- 数据 / 统计范围 ----------
@@ -1532,34 +1572,40 @@
 
     var initial = pickInitialRows();
     setData(initial.rows, initial.meta);
+    updateDataSourceHint();
     renderPicks('random');
 
-    // 静默检查新数据：Pages 模式对比最新 data.js，本地模式通过代理拉最新一页
+    // 静默检查新数据：优先直连官网查最新一页；官网不可用再退回对比仓库 data.js
     function autoCheckNew() {
       if (location.protocol === 'file:') return;
-      if (state.meta.source === 'cache' && state.meta.fetchedAt && Date.now() - state.meta.fetchedAt < 12 * 3600 * 1000) return;
-      if (!IS_LOCAL) {
-        // Pages：加载最新 data.js 对比期号
-        loadLatestDataJs().then(function (latest) {
-          var curLatest = String((state.rows[0] && state.rows[0][0]) || '');
-          var newLatest = String((latest[0] && latest[0][0]) || '');
-          if (newLatest <= curLatest) return;
-          var added = latest.length - state.rows.length;
-          toast('发现 ' + added + ' 期新数据（可更新至第 ' + newLatest + ' 期）', null,
-            { label: '立即更新', onClick: doUpdate });
-        }).catch(function () { /* 静默失败 */ });
-        return;
-      }
-      // 本地模式：通过本地服务器代理拉取最新一页
+      // 缓存很新时才跳过；若已错过最新一期开奖，则必须继续检查，避免看不到新开奖
+      if (state.meta.source === 'cache' && state.meta.fetchedAt && Date.now() - state.meta.fetchedAt < 3600 * 1000) return;
+      var pv = Shared.prevDrawInfo ? Shared.prevDrawInfo() : null;
+      var hasLatestDraw = pv && String((state.rows[0] && state.rows[0][1]) || '') >= Shared.fmtDate(pv.time);
+      if (state.meta.source === 'cache' && state.meta.fetchedAt &&
+        Date.now() - state.meta.fetchedAt < 12 * 3600 * 1000 && hasLatestDraw) return;
+
       var existingSet = {};
       state.rows.forEach(function (r) { existingSet[r[0]] = true; });
+
+      // 第一步：直连官网（本地模式经本地代理），拿到的是实时最新开奖
       fetchAllFromApi(existingSet, null, 1).then(function (res) {
         var list = res.list;
         if (!list || !list.length) return;
         toast(list.length >= PAGE_SIZE ? '发现较多新数据（≥' + list.length + ' 期），可一键更新'
           : '发现 ' + list.length + ' 期新数据（可更新至第 ' + list[0].lotteryDrawNum + ' 期）', null,
           { label: '立即更新', onClick: doUpdate });
-      }).catch(function () { /* 静默失败 */ });
+      }).catch(function () {
+        // 第二步：官网不可用时，退回对比仓库 data.js，至少能提示 Action 同步来的新数据
+        if (IS_LOCAL) return;
+        loadLatestDataJs().then(function (latest) {
+          var curLatest = String((state.rows[0] && state.rows[0][0]) || '');
+          var newLatest = String((latest[0] && latest[0][0]) || '');
+          if (newLatest <= curLatest) return;
+          toast('发现新数据（可更新至第 ' + newLatest + ' 期）', null,
+            { label: '立即更新', onClick: doUpdate });
+        }).catch(function () { /* 静默失败 */ });
+      });
     }
     setTimeout(autoCheckNew, 800);
 
