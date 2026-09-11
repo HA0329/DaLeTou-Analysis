@@ -180,7 +180,7 @@ test('号码矩阵与走势图联动：点击号码显示详情', () => {
   assert.match(detail, /滑动窗口/, '详情应包含滑动窗口图');
 });
 
-test('在线更新：数据合并与渲染', async () => {
+test('在线更新：直连官网增量合并与渲染', async () => {
   // 构造官网返回一条新期次
   const nextIssue = String(Number(rawData[0][0]) + 1);
   const apiRecord = {
@@ -202,7 +202,7 @@ test('在线更新：数据合并与渲染', async () => {
   await new Promise((r) => setImmediate(r));
 
   const chip = text(env.getEl('dataChip'));
-  assert.match(chip, new RegExp('在线数据 · ' + (rawData.length + 1) + ' 期'), '更新后数据标签应显示在线数据与新期数，实际：' + chip);
+  assert.match(chip, new RegExp('官网实时 · ' + (rawData.length + 1) + ' 期'), '更新后数据标签应显示官网实时与新期数，实际：' + chip);
   assert.match(text(env.getEl('latestDraw')), new RegExp(nextIssue), '最新一期应更新');
   assert.match(text(env.getEl('overview')), new RegExp(String(rawData.length + 1) + ' 期'), '概览总期数应更新');
 });

@@ -36,14 +36,23 @@ function MockElement(tag, id) {
   this.offsetHeight = 30;
   this._listeners = {};
   this._children = new Map();     // 选择器 → 子元素（懒创建，保证 querySelector 稳定返回同一对象）
+  this.onload = null;             // <script> 动态注入时用
+  this.onerror = null;
+  this.src = '';
 }
 Object.defineProperty(MockElement.prototype, 'innerHTML', {
   get() { return this._html; },
   set(v) { this._html = String(v == null ? '' : v); }
 });
-// 浏览器里 textContent 与 innerHTML 共享同一份内容（这里都映射到 _html，方便断言）
+// 浏览器语义：textContent 会拼接所有子孙文本节点。
+// 这里除自身 _html 外还累加已创建子元素的文本，
+// 否则「把内容写进子 span」的代码（如 toast()）在测试里读不到文本。
 Object.defineProperty(MockElement.prototype, 'textContent', {
-  get() { return this._html; },
+  get() {
+    let out = this._html;
+    for (const child of this._children.values()) out += child.textContent;
+    return out;
+  },
   set(v) { this._html = String(v == null ? '' : v); }
 });
 MockElement.prototype.addEventListener = function (type, fn) {
@@ -110,6 +119,7 @@ function createSandbox(opts) {
     readyState: 'complete',
     body: new MockElement('body'),
     documentElement: new MockElement('html'),
+    head: new MockElement('head'),
     getElementById: getEl,
     querySelector: () => new MockElement('div'),
     querySelectorAll: () => [],
@@ -118,11 +128,58 @@ function createSandbox(opts) {
     fire: (type, ev) => { (docListeners[type] || []).forEach((fn) => fn(ev)); }
   };
 
+  // 动态注入 <script src="data.js"> 的模拟：浏览器会真正执行脚本，
+  // 这里等价地触发 onload，并把 window.RAW_DATA 替换为该脚本携带的数据。
+  // loadLatestDataJs() 依赖这一行为（Pages 模式在官网不可用时的降级数据源）。
+  const rawDataMap = opts.rawDataMap || {};
+  document.head.appendChild = function (el) {
+    if (el) el.parentNode = document.head;
+    if (el && el.tagName === 'SCRIPT') {
+      const key = String(el.src || '').split('?')[0].split('/').pop();
+      const payload = Object.prototype.hasOwnProperty.call(rawDataMap, key) ? rawDataMap[key] : undefined;
+      Promise.resolve().then(() => {
+        if (payload !== undefined) sandbox.RAW_DATA = payload;
+        if (typeof el.onload === 'function') el.onload();
+      });
+    }
+    return el;
+  };
+
   const storage = opts.storage || {};
+  // 默认模拟本地服务器模式；传 opts.location 可模拟 GitHub Pages 等其它环境
+  const location = opts.location || { protocol: 'http:', origin: 'http://127.0.0.1:8123', href: 'http://127.0.0.1:8123/', hostname: '127.0.0.1' };
+  // 定时器倍率：测试里加快退避重试，避免为了等 800ms/1600ms 而拖慢用例
+  const timerScale = opts.timerScale === undefined ? 1 : opts.timerScale;
+  const schedule = (fn, ms) => (opts.realTimers ? setTimeout(fn, (ms || 0) * timerScale) : (sandbox.__pendingTimers.push(fn), sandbox.__pendingTimers.length));
+  const cancel = opts.realTimers ? clearTimeout : () => {};
   const sandbox = {
     console,
     document,
-    location: { protocol: 'http:', origin: 'http://127.0.0.1:8123', href: 'http://127.0.0.1:8123/' },
+    location,
+    // 沙箱内的内置类型必须指向本 realm 的构造器：
+    // vm 里 new TypeError 得到的是另一个 realm 的实例，`e instanceof TypeError` 恒为 false，
+    // 会让页面里的错误分支（如「浏览器禁止 file:// 跨域」提示）永远不生效。
+    TypeError,
+    Error,
+    Array,
+    Object,
+    String,
+    Number,
+    JSON,
+    Math,
+    Date,
+    Promise,
+    Boolean,
+    RegExp,
+    Map,
+    Set,
+    Symbol,
+    parseInt,
+    parseFloat,
+    isNaN,
+    isFinite,
+    encodeURIComponent,
+    decodeURIComponent,
     navigator: {},
     devicePixelRatio: 1,
     innerWidth: 1280,
@@ -134,8 +191,10 @@ function createSandbox(opts) {
     cancelAnimationFrame: () => {},
     setInterval: () => 1,
     clearInterval: () => {},
-    setTimeout: (fn) => { sandbox.__pendingTimers.push(fn); return sandbox.__pendingTimers.length; },
-    clearTimeout: () => {},
+    // 默认收集回调由 runTimers() 手动触发；realTimers 时走真实定时器，
+    // 便于测试带 setTimeout 的异步重试链路（在线更新的失败重试）
+    setTimeout: schedule,
+    clearTimeout: cancel,
     __pendingTimers: [],
     localStorage: {
       getItem: (k) => (k in storage ? storage[k] : null),
