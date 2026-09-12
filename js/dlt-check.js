@@ -114,7 +114,9 @@
       if (!keys.length) {
         html += '<p class="ck-miss"><b>很遗憾，未中奖。</b>共 ' + numFmt(totalCombos) + ' 注，投入 ' + numFmt(cost) + ' 元。</p>';
       } else {
-        html += '<table class="rules-table"><thead><tr><th>奖级</th><th>中奖条件</th><th>注数</th><th>单注奖金</th><th>小计</th></tr></thead><tbody>';
+        // 包一层 .table-wrap：大复式（如 12+6）会命中多个奖级、列宽叠加，
+        // 窄屏下需要横向滚动，避免把整个面板撑宽。
+        html += '<div class="table-wrap"><table class="rules-table"><thead><tr><th>奖级</th><th>中奖条件</th><th>注数</th><th>单注奖金</th><th>小计</th></tr></thead><tbody>';
         var fixedWin = 0, floatCombos = 0;
         keys.forEach(function (lv) {
           var s2 = stat[lv];
@@ -123,7 +125,7 @@
           var sub = lv <= 2 ? s2.combos + ' 注' : numFmt(s2.money) + ' 元';
           html += '<tr><td>' + NAME[lv] + '</td><td>' + COND[lv] + '</td><td>' + numFmt(s2.combos) + '</td><td>' + per + '</td><td>' + sub + '</td></tr>';
         });
-        html += '</tbody></table>';
+        html += '</tbody></table></div>';
         html += '<p><b>固定奖合计：' + numFmt(fixedWin) + ' 元</b>' +
           (floatCombos ? '；另有浮动奖 ' + numFmt(floatCombos) + ' 注（一/二等奖为浮动奖金，以当期官方开奖公告为准；单注最高 ' + (append ? '1800' : '1000') + ' 万）' : '') + '</p>';
         html += '<p>投入 ' + numFmt(cost) + ' 元（' + numFmt(totalCombos) + ' 注' + (append ? '，含追加' : '') + '）；固定奖收益 ' + numFmt(fixedWin) + ' 元' +

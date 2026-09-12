@@ -498,7 +498,9 @@
     if (!prizes.length) {
       return '<p class="rules-note">该期开奖公告数据缺失（data.js 未包含），请点击顶部「🔄 在线更新」获取完整公告。</p>';
     }
-    var html = '<table class="prize-table"><thead><tr><th>奖级</th><th>中奖注数</th><th>单注奖金</th><th>小计</th>' + (extra ? '<th class="hide-sm">备注</th>' : '') + '</tr></thead><tbody>';
+    // 必须包在 .table-wrap 里：奖级表列多且 white-space:nowrap，窄屏下需要横向滚动，
+    // 否则会把整个文档撑宽（移动端出现整页横向滚动条）。
+    var html = '<div class="table-wrap"><table class="prize-table"><thead><tr><th>奖级</th><th>中奖注数</th><th>单注奖金</th><th>小计</th>' + (extra ? '<th class="hide-sm">备注</th>' : '') + '</tr></thead><tbody>';
     var totalCount = 0, totalMoney = 0;
     prizes.forEach(function (p) {
       var name = String(p[0]), cnt = Number(p[1]) || 0, amt = Number(p[2]) || 0;
@@ -509,7 +511,7 @@
         (amt > 0 ? (amt >= 10000 ? (amt / 10000).toFixed(1) + ' 万元' : amt.toLocaleString('zh-CN') + ' 元') : '—') +
         '</td><td>' + fmtNum(sub) + ' 元</td>' + (extra ? '<td class="dim hide-sm">' + note + '</td>' : '') + '</tr>';
     });
-    html += '<tr class="tt"><td>合计</td><td>' + fmtNum(totalCount) + ' 注</td><td>—</td><td>' + fmtNum(totalMoney) + ' 元</td>' + (extra ? '<td class="hide-sm"></td>' : '') + '</tr></tbody></table>';
+    html += '<tr class="tt"><td>合计</td><td>' + fmtNum(totalCount) + ' 注</td><td>—</td><td>' + fmtNum(totalMoney) + ' 元</td>' + (extra ? '<td class="hide-sm"></td>' : '') + '</tr></tbody></table></div>';
     html += '<p class="rules-note">' + (isNewRule
       ? (upgraded ? '该期开奖前奖池 ' + fmtYi(pre) + '（≥8亿），三至七等奖按升级档兑付。' : '该期开奖前奖池 ' + fmtYi(pre) + '（&lt;8亿），固定奖按基本档兑付。')
       : '该期开奖早于 2026 新规施行日，奖级为当时的旧规则（9 奖级）。') +

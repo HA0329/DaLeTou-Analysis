@@ -152,10 +152,10 @@ screenshots/              界面截图（当前版本）
 
 ## 📸 界面
 
-以下截图均由本项目实际运行渲染（`data.js` 2920 期，最新一期 26102 期 · 2026-09-07）。
+以下截图均由本项目实际运行渲染（`data.js` 2922 期，最新一期 26104 期 · 2026-09-12）。
 
 <p align="center">
-  <img src="screenshots/01-overview.png" alt="首页概览（亮色）" width="49%">
+  <img src="screenshots/01-hero.png" alt="首页概览（亮色）" width="49%">
   <img src="screenshots/02-dark.png" alt="深色主题" width="49%">
 </p>
 <p align="center">

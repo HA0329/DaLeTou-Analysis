@@ -131,7 +131,10 @@ main{max-width:1180px; margin:0 auto; padding:0 16px;}
 
 .chart-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:10px;}
 .chart-grid.one{grid-template-columns:1fr;}
-.chart-box{position:relative; background:var(--surface-2); border:1px solid var(--line); border-radius:10px; padding:12px 14px 8px;}
+/* min-width:0 必须保留：Grid 子项默认 min-width:auto，会被内部 white-space:nowrap
+   的表格 / 热力图撑开，导致 1fr 轨道按 min-content 计算、整个面板超出容器宽度
+   （窄屏表现为整页横向滚动条）。置 0 后由内部的 .table-wrap / .trend-scroll 自行滚动。 */
+.chart-box{position:relative; min-width:0; background:var(--surface-2); border:1px solid var(--line); border-radius:10px; padding:12px 14px 8px;}
 .chart-box canvas{width:100%; display:block; cursor:crosshair;}
 .chart-tip{
   position:absolute; display:none; pointer-events:none; z-index:5; max-width:300px;
