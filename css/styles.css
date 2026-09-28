@@ -363,3 +363,9 @@ tr.rec-open td{background:var(--warm);}
   body{background:#fff;}
   .panel{break-inside:avoid; box-shadow:none;}
 }
+
+/* 遗漏分析：超均回补榜 */
+.rebound-row{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:10px 0 4px; font-size:13px; color:var(--muted);}
+.rebound-row .pr-label{font-weight:600; color:var(--ink); margin-right:2px;}
+.rebound-row .reb-cnt{color:var(--muted); font-size:12px; margin-right:4px;}
+.rebound-row .reb-sep{width:1px; height:16px; background:var(--line);}

@@ -41,6 +41,7 @@ test('页面初始化：不抛异常且各面板都有内容', () => {
   assert.match(text(g('trendBack')), /期号/, '后区走势图未渲染');
   assert.match(text(g('frontHotList')), /次 \//, '热号榜未渲染');
   assert.match(text(g('omitFrontTable')), /当前遗漏/, '遗漏表未渲染');
+  assert.match(text(g('omitRebound')), /回补/, '超均回补榜未渲染');
   assert.match(text(g('frontPairs')), /期出现/, '组合榜未渲染');
   assert.match(text(g('consecStats')), /连号/, '连号统计未渲染');
   assert.match(text(g('spanStats')), /平均跨度/, '跨度统计未渲染');
@@ -157,6 +158,28 @@ test('预测方法切换与回测', () => {
   const table = text(env.getEl('btTable'));
   assert.match(table, /纯随机基准/, '回测表应包含随机基准行');
   assert.match(table, /综合加权/, '回测表应包含各方法');
+  assert.match(table, /中奖率/, '回测表应包含中奖率列');
+  assert.match(table, /平均奖金/, '回测表应包含平均奖金列');
+  assert.match(table, /显著性/, '回测表应包含显著性列');
+  assert.match(table, /🏆/, '回测表应标出最优方法');
+  assert.match(table, /近半|早半/, '回测表应显示近半/早半分段中奖率');
+  assert.match(text(env.getEl('btSeedLabel')), /种子/, '应显示当前种子');
+  assert.match(text(env.getEl('predBtRef')), /回测参考/, '预测结果应附回测参考');
+
+  // 点击回测方法行 → 切换预测方法
+  env.getEl('btTable').fire('click', { target: { closest: () => ({ dataset: { m: 'freq' } }) } });
+  assert.match(text(env.getEl('predDesc')), /频次加权/, '点击回测行应切换预测方法');
+});
+
+test('模拟选号：对照最新一期判定中奖', () => {
+  const env = bootPage();
+  env.getEl('btnRandom').fire('click');
+  assert.match(text(env.getEl('pickResult')), /随机 1/, '应生成 5 注选号');
+  env.getEl('btnPickCheck').fire('click');
+  const out = text(env.getEl('pickResult'));
+  assert.match(out, /对照第 \d{5} 期/, '应显示对照期号');
+  assert.match(out, /固定奖合计/, '应显示固定奖合计');
+  assert.match(out, /投入 10 元/, '应按 5 注 × 2 元统计投入');
 });
 
 test('遗漏表排序：点击表头切换升降序', () => {

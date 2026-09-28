@@ -204,6 +204,7 @@
       <div class="table-wrap"><table id="omitFrontTable"></table></div>
       <h3>后区号码 01–12</h3>
       <div class="table-wrap"><table id="omitBackTable"></table></div>
+      <div id="omitRebound"></div>
       <p class="rules-note">「回补压力」= 当前遗漏 ÷ 平均遗漏，数值越大表示该号码比平时更久未出；「遗漏标准差」越小说明该号码的出号间隔越规律。</p>
     </div>
   </section>
@@ -374,6 +375,7 @@
         <button class="btn btn-ghost" id="btnOmit">遗漏策略</button>
         <button class="btn btn-ghost" id="btnBalance">均衡策略</button>
         <button class="btn btn-ghost" id="btnCopy">📋 复制结果</button>
+        <button class="btn btn-ghost" id="btnPickCheck" title="把当前生成的 5 注逐一对照最新一期开奖判定中奖">🎯 对照最新一期判定</button>
       </div>
       <div id="pickResult"></div>
       <div class="hint">每次生成 5 注。热号策略按历史出现频次加权抽取；遗漏策略优先抽取长期未出的号码；均衡策略兼顾奇偶、大小与和值区间。统计范围切换后，策略所用的频次 / 遗漏也随之变化。</div>
@@ -393,7 +395,7 @@
         <button class="btn btn-ghost" data-m="hotcold">冷热混合</button>
         <button class="btn btn-ghost" data-m="sumrange">和值区间</button>
         <span class="sep"></span>
-        <button class="btn btn-ghost" id="btnBacktest" title="用最近 100 期逐期回测各方法命中率，对照纯随机基准">📈 近100期回测</button>
+        <button class="btn btn-ghost" id="btnBacktest" title="用每期之前的历史数据逐期回测各方法命中率与中奖率，对照纯随机基准">📈 历史回测</button>
       </div>
       <div class="pred-desc" id="predDesc"></div>
       <div class="chart-grid">
@@ -405,9 +407,31 @@
         <div><span class="pr-label">后区推荐（评分 TOP3）：</span><span id="predRecoB"></span></div>
       </div>
       <div id="predResult"></div>
+      <div id="predBtRef"></div>
       <div class="hint">⚠️ 所有方法均基于历史统计，仅供娱乐参考：开奖为独立随机事件，任何方法都无预测能力保证，请理性购彩、量力而行。</div>
       <div class="bt-wrap" id="btWrap" hidden>
-        <h3>近 100 期历史回测（用每期之前的所有数据预测该期，对照纯随机基准）</h3>
+        <h3>历史回测（用每期之前的所有数据预测该期，对照纯随机基准）</h3>
+        <div class="toolbar" id="btBar">
+          <label>回测期数
+            <select id="btPeriods" title="逐期回测的期数，越多样本越稳定">
+              <option value="50">近 50 期</option>
+              <option value="100" selected>近 100 期</option>
+              <option value="200">近 200 期</option>
+              <option value="500">近 500 期</option>
+            </select>
+          </label>
+          <label>每期抽样
+            <select id="btTrials" title="每期重复抽样的注数，越多噪声越低">
+              <option value="1">1 注</option>
+              <option value="3" selected>3 注</option>
+              <option value="5">5 注</option>
+              <option value="10">10 注</option>
+            </select>
+          </label>
+          <button class="btn btn-ghost" id="btnBtSeed" title="换一组固定种子重新回测，检验结果稳健性（换种子后结果仍可复现）">🔁 换一组种子</button>
+          <span id="btSeedLabel" style="color:var(--muted);"></span>
+        </div>
+        <div class="chart-box"><h3>各方法中奖率（≥七等奖）对比 · 灰色柱为纯随机基准</h3><canvas id="btChart" height="230"></canvas><div class="chart-tip"></div></div>
         <div class="table-wrap"><table id="btTable"></table></div>
       </div>
     </div>

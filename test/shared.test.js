@@ -178,3 +178,23 @@ test('格式化工具', () => {
   assert.equal(Shared.fmtNum(0), '—');
   assert.equal(Shared.fmtPct(0.5123), '51.23%');
 });
+
+test('2026 新规奖级：prizeLevelByHit / prizeFixedMoney', () => {
+  // 13 个中奖条件 → 7 奖级
+  const map = [
+    [5, 2, 1], [5, 1, 2], [5, 0, 3], [4, 2, 3], [4, 1, 4], [4, 0, 5],
+    [3, 2, 5], [3, 1, 6], [2, 2, 6], [3, 0, 7], [1, 2, 7], [2, 1, 7], [0, 2, 7]
+  ];
+  map.forEach(([f, b, lv]) => assert.equal(Shared.prizeLevelByHit(f, b), lv, `${f}+${b}`));
+  // 未中奖组合
+  assert.equal(Shared.prizeLevelByHit(0, 0), 0);
+  assert.equal(Shared.prizeLevelByHit(2, 0), 0);
+  assert.equal(Shared.prizeLevelByHit(1, 1), 0);
+  // 固定奖金额：基本档 / 升级档；一、二等奖浮动不计
+  assert.equal(Shared.prizeFixedMoney(3, false), 5000);
+  assert.equal(Shared.prizeFixedMoney(3, true), 6666);
+  assert.equal(Shared.prizeFixedMoney(7, false), 5);
+  assert.equal(Shared.prizeFixedMoney(7, true), 7);
+  assert.equal(Shared.prizeFixedMoney(1, false), 0, '一等奖浮动，无固定金额');
+  assert.equal(Shared.prizeFixedMoney(0, false), 0);
+});

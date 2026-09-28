@@ -636,8 +636,25 @@
     return c;
   }
 
+  // 单注中奖评估（2026 新规 7 奖级：固定奖按基本档估算，一/二等奖为浮动奖金不计入）
+  function evaluatePick(pick, target) {
+    var hf = countMatch(pick.f, target[2]);
+    var hb = countMatch(pick.b, target[3]);
+    var lv = Shared.prizeLevelByHit(hf, hb);
+    return { hf: hf, hb: hb, level: lv, money: Shared.prizeFixedMoney(lv, false) };
+  }
+
+  // 二项比例相对基准的正态近似 z 分数：|z| ≥ 2 视为统计上显著偏离随机基准
+  function zScore(p, p0, n) {
+    if (!(n > 0)) return 0;
+    var sd = Math.sqrt(p0 * (1 - p0) / n);
+    return sd > 0 ? (p - p0) / sd : 0;
+  }
+
   // 历史回测：用「该期之前的所有数据」预测该期，对照纯随机基准。
   // seed 固定 → 结果可复现（原先用 Math.random，每次点按钮数字都不一样，无法比较）。
+  // 指标：平均命中数、≥1/≥3 命中率、任一中奖率（≥七等奖）、平均固定奖/注、期望净回报、
+  // 相对随机基准的显著性 z 分数；opts.segments 为 true 时额外给出近半 / 早半分段对比。
   function backtest(rows, opts) {
     opts = opts || {};
     var K = opts.periods || 100;          // 回测期数
@@ -645,50 +662,111 @@
     var seed = opts.seed == null ? 20260101 : opts.seed;
     var minHistory = opts.minHistory == null ? 200 : opts.minHistory;
     var methods = opts.methods || ['ensemble', 'freq', 'recent', 'omit', 'follow', 'hotcold', 'sumrange'];
-    var agg = {}, i, t, k;
-    for (i = 0; i < methods.length; i++) {
-      agg[methods[i]] = { fh: 0, bh: 0, hit1: 0, hit3: 0, bhit1: 0, t: 0 };
+    var withSeg = !!opts.segments;
+    var i, t, k;
+
+    function newAgg() {
+      return { fh: 0, bh: 0, hit1: 0, hit3: 0, bhit1: 0, win: 0, money: 0, levels: {}, t: 0 };
     }
+    var agg = {}, seg = {};
+    for (i = 0; i < methods.length; i++) {
+      agg[methods[i]] = newAgg();
+      if (withSeg) seg[methods[i]] = { recent: newAgg(), early: newAgg() };
+    }
+    var half = withSeg ? Math.floor(K / 2) : 0;
+
     var done = 0;
     for (t = 0; t < K && rows.length - t - 1 >= minHistory; t++) {
       var target = rows[t];
       var st = buildPredStats(rows.slice(t + 1));
+      var segKey = withSeg ? (t < half ? 'recent' : 'early') : null;
       for (i = 0; i < methods.length; i++) {
         var mm = methods[i];
         var rng = Shared.mulberry32(seed + i * 7919);   // 每种方法用同一条随机流，横向可比
         for (k = 0; k < trials; k++) {
           var picks = predictMethod(mm, st, 1, rng)[0];
-          var hf = countMatch(picks.f, target[2]);
-          var hb = countMatch(picks.b, target[3]);
-          agg[mm].fh += hf; agg[mm].bh += hb;
-          agg[mm].hit1 += hf >= 1 ? 1 : 0;
-          agg[mm].hit3 += hf >= 3 ? 1 : 0;
-          agg[mm].bhit1 += hb >= 1 ? 1 : 0;
-          agg[mm].t++;
+          var ev = evaluatePick(picks, target);
+          var a = agg[mm];
+          a.fh += ev.hf; a.bh += ev.hb;
+          a.hit1 += ev.hf >= 1 ? 1 : 0;
+          a.hit3 += ev.hf >= 3 ? 1 : 0;
+          a.bhit1 += ev.hb >= 1 ? 1 : 0;
+          if (ev.level) { a.win++; a.money += ev.money; a.levels[ev.level] = (a.levels[ev.level] || 0) + 1; }
+          a.t++;
+          if (segKey) {
+            var s = seg[mm][segKey];
+            s.fh += ev.hf; s.bh += ev.hb;
+            s.hit1 += ev.hf >= 1 ? 1 : 0;
+            s.hit3 += ev.hf >= 3 ? 1 : 0;
+            s.bhit1 += ev.hb >= 1 ? 1 : 0;
+            if (ev.level) { s.win++; s.money += ev.money; s.levels[ev.level] = (s.levels[ev.level] || 0) + 1; }
+            s.t++;
+          }
         }
       }
       done++;
     }
-    // 纯随机基准：前区 5 中 k 的超几何期望；后区同理
+
+    // 纯随机基准：组合数学精确值
     var baseF = 5 * 5 / 35;
     var baseB = 2 * 2 / 12;
     var base1 = 1 - Shared.comb(30, 5) / Shared.comb(35, 5);
     var base3 = (Shared.comb(5, 3) * Shared.comb(30, 2) + Shared.comb(5, 4) * Shared.comb(30, 1) + Shared.comb(5, 5)) / Shared.comb(35, 5);
     var baseB1 = 1 - Shared.comb(10, 2) / Shared.comb(12, 2);
-    var results = methods.map(function (m) {
-      var a = agg[m];
-      if (!a.t) return { method: m, name: (PRED_METHODS[m] || {}).name || m, sample: 0 };
+    // 随机一注「任一中奖（≥七等奖）」概率与固定奖期望：枚举全部命中个数组合精确求和
+    var baseWin = 0, basePrize = 0;
+    for (var f = 0; f <= 5; f++) {
+      for (var b = 0; b <= 2; b++) {
+        var ways = Shared.comb(5, f) * Shared.comb(30, 5 - f) * Shared.comb(2, b) * Shared.comb(10, 2 - b);
+        if (!ways) continue;
+        var prob = ways / (Shared.comb(35, 5) * Shared.comb(12, 2));
+        var lv = Shared.prizeLevelByHit(f, b);
+        if (lv) baseWin += prob;
+        basePrize += prob * Shared.prizeFixedMoney(lv, false);
+      }
+    }
+
+    function summarize(a) {
+      if (!a.t) return null;
+      var lvList = Object.keys(a.levels).map(Number).sort(function (x, y) { return x - y; });
       return {
-        method: m, name: (PRED_METHODS[m] || {}).name || m, sample: done,
+        sample: a.t,
         frontAvg: a.fh / a.t, backAvg: a.bh / a.t,
         frontHit1: a.hit1 / a.t, frontHit3: a.hit3 / a.t, backHit1: a.bhit1 / a.t,
-        frontDelta: a.fh / a.t - baseF
+        winRate: a.win / a.t,
+        avgPrize: a.money / a.t,
+        netExpect: a.money / a.t - 2,          // 每注成本 2 元（未追加），浮动奖按 0 计
+        frontHit1Z: zScore(a.hit1 / a.t, base1, a.t),
+        winZ: zScore(a.win / a.t, baseWin, a.t),
+        levelDist: lvList.map(function (lv) { return { level: lv, notes: a.levels[lv] }; })
       };
+    }
+
+    var results = methods.map(function (m) {
+      var s = summarize(agg[m]);
+      if (!s) return { method: m, name: (PRED_METHODS[m] || {}).name || m, sample: 0 };
+      var r = {
+        method: m, name: (PRED_METHODS[m] || {}).name || m,
+        sample: s.sample,
+        frontAvg: s.frontAvg, backAvg: s.backAvg,
+        frontHit1: s.frontHit1, frontHit3: s.frontHit3, backHit1: s.backHit1,
+        winRate: s.winRate, avgPrize: s.avgPrize, netExpect: s.netExpect,
+        frontHit1Z: s.frontHit1Z, winZ: s.winZ, levelDist: s.levelDist,
+        frontDelta: s.frontAvg - baseF
+      };
+      if (withSeg) r.segments = { recent: summarize(seg[m].recent), early: summarize(seg[m].early) };
+      return r;
     });
-    return {
+
+    var out = {
       periods: done, trials: trials, seed: seed, methods: results,
-      baseline: { frontAvg: baseF, backAvg: baseB, frontHit1: base1, frontHit3: base3, backHit1: baseB1 }
+      baseline: {
+        frontAvg: baseF, backAvg: baseB, frontHit1: base1, frontHit3: base3, backHit1: baseB1,
+        winRate: baseWin, avgPrize: basePrize, netExpect: basePrize - 2
+      }
     };
+    if (withSeg) out.segHalf = half;
+    return out;
   }
 
   return {

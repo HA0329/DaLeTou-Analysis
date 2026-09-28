@@ -10,12 +10,10 @@
   var Shared = root.DltShared;
   var pad2 = Shared.pad2, esc = Shared.esc, comb = Shared.comb;
 
-  // 奖级映射（新规：13 个中奖条件 → 7 个奖级）
-  var PREFIX = { '5+2': 1, '5+1': 2, '5+0': 3, '4+2': 3, '4+1': 4, '4+0': 5, '3+2': 5, '3+1': 6, '2+2': 6, '3+0': 7, '1+2': 7, '2+1': 7, '0+2': 7 };
-  var BASE = { 3: 5000, 4: 300, 5: 150, 6: 15, 7: 5 };        // 基本档
-  var UP = { 3: 6666, 4: 380, 5: 200, 6: 18, 7: 7 };          // 奖池 ≥ 8 亿升级档
-  var NAME = { 1: '一等奖', 2: '二等奖', 3: '三等奖', 4: '四等奖', 5: '五等奖', 6: '六等奖', 7: '七等奖' };
-  var COND = { 1: '5+2', 2: '5+1', 3: '5+0 / 4+2', 4: '4+1', 5: '4+0 / 3+2', 6: '3+1 / 2+2', 7: '3+0 / 1+2 / 2+1 / 0+2' };
+  // 奖级映射（新规：13 个中奖条件 → 7 个奖级）——常量与判定集中在 dlt-shared.js，
+  // 与回测引擎共用同一张奖金表，避免口径漂移。
+  var PREFIX = Shared.PRIZE_PREFIX, BASE = Shared.PRIZE_BASE, UP = Shared.PRIZE_UP;
+  var NAME = Shared.PRIZE_NAME, COND = Shared.PRIZE_COND;
 
   var STORE_KEY = 'dlt_check_input_v1';
   var HISTORY_KEY = 'dlt_check_history_v1';

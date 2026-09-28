@@ -38,6 +38,8 @@
   var lastPicks = null;
   var predMethod = 'ensemble';
   var predScores = null;
+  var lastBacktest = null;    // 最近一次回测结果（供预测面板引用「该方法的回测表现」）
+  var btSeed = 20260101;      // 当前回测种子（可「换一组种子」，换后结果仍可复现）
   var trendRange = 30;
   var trendShowOmit = false;
   var omitSort = { front: { key: 'num', asc: true }, back: { key: 'num', asc: true } };
@@ -724,6 +726,21 @@
     }
     omitTable('omitFrontTable', S.frontOmit, 'f', omitSort.front);
     omitTable('omitBackTable', S.backOmit, 'b', omitSort.back);
+
+    // 超均回补榜：回补压力 ≥1 且当前遗漏 >0 的号码，按压力取 TOP5
+    function reboundList(list, zone, label) {
+      var arr = list.slice().filter(function (r) { return r.pressure >= 1 && r.curOmit > 0; })
+        .sort(function (a, b) { return b.pressure - a.pressure || a.num - b.num; }).slice(0, 5);
+      if (!arr.length) return '';
+      return '<span class="pr-label">' + label + '</span>' + arr.map(function (r) {
+        return ball(r.num, zone, true) + '<span class="reb-cnt">' + r.pressure.toFixed(1) + '×</span>';
+      }).join('') + '<span class="dim" style="font-size:12px;">（压力倍数）</span>';
+    }
+    var rbF = reboundList(S.frontOmit, 'f', '前区超均回补 TOP5：');
+    var rbB = reboundList(S.backOmit, 'b', '后区超均回补 TOP5：');
+    $('omitRebound').innerHTML = (rbF || rbB)
+      ? '<div class="rebound-row">' + rbF + (rbF && rbB ? '<span class="reb-sep"></span>' : '') + rbB + '</div>'
+      : '';
   }
 
   function buildSum() {
@@ -1230,6 +1247,59 @@
     copyText(lines.join('\n'), '已复制选号结果');
   }
 
+  // 把当前生成的选号逐注对照「最新一期」开奖判定中奖情况（复用中奖查询的纯计算逻辑）
+  function pickCheckLatest() {
+    if (!lastPicks) { toast('请先点击任一策略生成选号', false); return; }
+    if (!window.DltCheck || !window.DLT_CURRENT_ROWS || !window.DLT_CURRENT_ROWS.length) { toast('数据尚未加载完成', false); return; }
+    var rows = window.DLT_CURRENT_ROWS;
+    var draw = rows[0], FD = draw[2], BD = draw[3];
+    var prePool = rows.length > 1 ? (Number(rows[1][4]) || 0) : (Number(draw[4]) || 0);
+    var upgraded = prePool >= Shared.EIGHT_YI && String(draw[1]) >= Shared.NEW_RULE_DATE;
+    var totalWin = 0, lines = [];
+    lastPicks.notes.forEach(function (nt, idx) {
+      var r = window.DltCheck.countByLevel(nt.f, nt.b, FD, BD, upgraded);
+      var keys = Object.keys(r.stat).map(Number).sort(function (a, b) { return a - b; });
+      var money = keys.reduce(function (a, lv) { return a + r.stat[lv].money; }, 0);
+      totalWin += money;
+      lines.push('<div class="pick-note"><span class="idx">' + PICK_LABELS[lastPicks.kind] + ' ' + (idx + 1) + '</span>' +
+        balls(nt.f, 'f') + '<span style="margin:0 3px;color:var(--muted);">|</span>' + balls(nt.b, 'b') +
+        '<span class="pred-meta">' + (keys.length ? '中' + keys.map(function (lv) { return window.DltCheck.RULES.NAME[lv]; }).join('、') : '未中奖') + (money ? ' · +' + money + ' 元' : '') + '</span></div>');
+    });
+    var cost = lastPicks.notes.length * 2;
+    var diff = totalWin - cost;
+    $('pickResult').innerHTML += '<div class="ck-box" style="margin-top:10px;">' +
+      '<p><b>对照第 ' + esc(draw[0]) + ' 期（' + esc(draw[1]) + '）开奖：</b>' + FD.map(pad2).join(' ') + ' <span class="ck-sep">+</span> ' + BD.map(pad2).join(' ') + '</p>' +
+      lines.join('') +
+      '<p><b>' + lastPicks.notes.length + ' 注固定奖合计：' + totalWin + ' 元</b>（投入 ' + cost + ' 元，' +
+      (diff >= 0 ? '<span class="ck-win">净赚 ' + diff + ' 元 🎉</span>' : '<span class="ck-lose">净亏 ' + (-diff) + ' 元</span>') +
+      '；一/二等奖为浮动奖金未计入）</p></div>';
+    document.getElementById('pick').scrollIntoView({ behavior: 'smooth' });
+    toast('已对照最新一期判定 ' + lastPicks.notes.length + ' 注', true);
+  }
+
+  // 切换预测方法：同步按钮高亮并重算（回测表格行点击与工具栏按钮共用）
+  function selectPredMethod(mm) {
+    if (!Core.PRED_METHODS[mm]) return;
+    document.querySelectorAll('#predBar button[data-m]').forEach(function (x) {
+      x.classList.remove('btn-primary'); x.classList.add('btn-ghost');
+    });
+    var btn = document.querySelector('#predBar button[data-m="' + mm + '"]');
+    if (btn) { btn.classList.remove('btn-ghost'); btn.classList.add('btn-primary'); }
+    predMethod = mm;
+    buildPrediction();
+  }
+
+  // 预测结果下方的「回测参考」行：展示当前方法在最近一次回测中的表现
+  function renderBacktestRef() {
+    var el = $('predBtRef');
+    if (!el) return;
+    var btRef = lastBacktest && lastBacktest.byMethod && lastBacktest.byMethod[predMethod];
+    if (!btRef) { el.innerHTML = ''; return; }
+    var sig = btRef.winZ >= 2 ? '，<b class="ck-win">显著优于随机</b>' : btRef.winZ <= -2 ? '，显著低于随机' : '';
+    el.innerHTML = '<p class="hint" style="margin-top:10px;">📊 回测参考（近 ' + lastBacktest.periods + ' 期 × ' + lastBacktest.trials + ' 注/期，种子 ' + lastBacktest.seed + '）：中奖率 ' + pct(btRef.winRate, 1) +
+      '（纯随机基准 ' + pct(lastBacktest.baseline.winRate, 1) + '）' + sig + '；平均固定奖 ' + btRef.avgPrize.toFixed(2) + ' 元/注。点击「📈 历史回测」查看全部方法对比。</p>';
+  }
+
   // ---------- 预测 ----------
   function buildPrediction() {
     var st = Core.buildPredStats(state.rows.slice(0, S.n));
@@ -1254,6 +1324,7 @@
         balls(nt.f, 'f') + '<span style="margin:0 3px;color:var(--muted);">|</span>' + balls(nt.b, 'b') +
         '<span class="pred-meta">和值' + s + ' · 奇' + odd + '偶' + (5 - odd) + ' · 大' + big + '小' + (5 - big) + '</span></div>';
     }).join('');
+    renderBacktestRef();
 
     var fl = [], fv = [], bl = [], bv = [], i;
     for (i = 1; i <= FRONT_MAX; i++) { fl.push(pad2(i)); fv.push(+sc.sF[i].toFixed(1)); }
@@ -1280,29 +1351,75 @@
     if (btn.disabled) return;
     btn.disabled = true;
     $('btWrap').hidden = false;
-    $('btTable').innerHTML = '<tr><td colspan="6" style="color:var(--muted);">回测计算中…</td></tr>';
+    $('btTable').innerHTML = '<tr><td colspan="7" style="color:var(--muted);">回测计算中…</td></tr>';
+    var P = parseInt($('btPeriods').value, 10) || 100;
+    var T = parseInt($('btTrials').value, 10) || 3;
+    $('btSeedLabel').textContent = '当前种子 ' + btSeed;
     setTimeout(function () {
-      var res = Core.backtest(state.rows, { periods: 100, trials: 3, minHistory: 200, seed: 20260101 });
+      var t0 = Date.now();
+      var res = Core.backtest(state.rows, { periods: P, trials: T, minHistory: 200, seed: btSeed, segments: true });
+      lastBacktest = res;
+      var byMethod = {};
+      res.methods.forEach(function (m) { byMethod[m.method] = m; });
+      lastBacktest.byMethod = byMethod;
+      renderBacktestRef();
       var base = res.baseline;
-      var html = '<thead><tr><th>方法</th><th>平均前区命中/注</th><th>平均后区命中/注</th><th>前区≥1命中率</th><th>前区≥3命中率</th><th>相对随机（前区）</th></tr></thead><tbody>';
+      // 最优方法：中奖率最高（并列时取显著性 Z 值更高者）
+      var best = null;
       res.methods.forEach(function (m) {
-        if (!m.sample) { html += '<tr><td>' + esc(m.name) + '</td><td colspan="5" style="color:var(--muted);">数据不足</td></tr>'; return; }
-        var d = m.frontDelta;
-        var badge = d >= 0.03 ? '<span class="badge good">+' + d.toFixed(3) + '</span>'
-          : d <= -0.03 ? '<span class="badge cold">' + d.toFixed(3) + '</span>'
-          : '<span class="badge norm">' + (d >= 0 ? '+' : '') + d.toFixed(3) + '</span>';
-        html += '<tr><td style="font-weight:600;">' + esc(m.name) + '</td><td>' + m.frontAvg.toFixed(3) + '</td><td>' + m.backAvg.toFixed(3) +
-          '</td><td>' + pct(m.frontHit1, 1) + '</td><td>' + pct(m.frontHit3, 1) + '</td><td>' + badge + '</td></tr>';
+        if (!m.sample) return;
+        if (!best || m.winRate > best.winRate || (m.winRate === best.winRate && m.winZ > best.winZ)) best = m;
       });
-      html += '<tr style="background:var(--table-head);"><td style="font-weight:600;">纯随机基准</td><td>' + base.frontAvg.toFixed(3) +
-        '</td><td>' + base.backAvg.toFixed(3) + '</td><td>' + pct(base.frontHit1, 1) + '</td><td>' + pct(base.frontHit3, 1) + '</td><td>—</td></tr>';
-      html += '<tr class="tt"><td colspan="6" class="dim" style="text-align:left;">回测样本：' + res.periods + ' 期 × 每期 ' + res.trials +
-        ' 次抽样（固定随机种子 ' + res.seed + '，结果可复现）；每期仅使用该期之前的历史数据。样本量有限，小幅偏差属正常波动。</td></tr></tbody>';
+      // 图表：各方法中奖率（≥七等奖）vs 纯随机基准
+      var btLabels = [], btVals = [], btColors = [];
+      res.methods.forEach(function (m) {
+        btLabels.push(m.name + (m === best ? ' 🏆' : ''));
+        btVals.push(m.sample ? +(m.winRate * 100).toFixed(2) : 0);
+        btColors.push(m === best ? '#c22a2a' : '#2f6fd6');
+      });
+      btLabels.push('纯随机基准');
+      btVals.push(+(base.winRate * 100).toFixed(2));
+      btColors.push('#9aa1ad');
+      Charts.register($('btChart'), function () {
+        Charts.bar($('btChart'), {
+          labels: btLabels, values: btVals, valueTop: true,
+          colors: function (i) { return btColors[i]; },
+          yFmt: function (v) { return v.toFixed(1) + '%'; },
+          tipFmt: function (v, i) {
+            return btLabels[i] + '：中奖率 ' + v.toFixed(2) + '%' + (i < res.methods.length && res.methods[i].sample
+              ? '（样本 ' + res.methods[i].sample + ' 注）' : '（组合数学精确值）');
+          }
+        });
+      });
+      // 表格：命中 / 中奖率 / 奖金 / 净回报 / 显著性 + 近半早半分段
+      var html = '<thead><tr><th>方法</th><th>平均命中/注<br>(前·后)</th><th>前区≥1命中率</th><th>中奖率<br>(≥七等奖)</th><th>平均奖金/注</th><th>期望净回报/注</th><th>显著性 (Z)</th></tr></thead><tbody>';
+      res.methods.forEach(function (m) {
+        if (!m.sample) { html += '<tr><td>' + esc(m.name) + '</td><td colspan="6" style="color:var(--muted);">数据不足</td></tr>'; return; }
+        var segTxt = (m.segments && m.segments.recent && m.segments.early)
+          ? '<span class="dim" style="font-size:11px;">近半 ' + pct(m.segments.recent.winRate, 1) + ' / 早半 ' + pct(m.segments.early.winRate, 1) + '</span>'
+          : '';
+        var winBadge = '<span class="badge ' + (m.winZ >= 2 ? 'good' : m.winZ <= -2 ? 'cold' : 'norm') + '">' + pct(m.winRate, 1) + '</span>';
+        var zTxt = m.winZ >= 2 ? '<span class="badge good" title="|Z|≥2 视为统计显著">优于随机 ' + m.winZ.toFixed(1) + '</span>'
+          : m.winZ <= -2 ? '<span class="badge cold" title="|Z|≥2 视为统计显著">低于随机 ' + m.winZ.toFixed(1) + '</span>'
+          : '<span class="dim">' + (m.winZ >= 0 ? '+' : '') + m.winZ.toFixed(1) + '</span>';
+        html += '<tr data-m="' + esc(m.method) + '" title="点击切换预测方法" style="cursor:pointer;">' +
+          '<td style="font-weight:600;">' + (m === best ? '🏆 ' : '') + esc(m.name) + '<br>' + segTxt + '</td>' +
+          '<td>' + m.frontAvg.toFixed(3) + ' · ' + m.backAvg.toFixed(3) + '</td>' +
+          '<td>' + pct(m.frontHit1, 1) + '</td>' +
+          '<td>' + winBadge + '</td>' +
+          '<td>' + m.avgPrize.toFixed(2) + ' 元</td>' +
+          '<td>' + (m.netExpect >= 0 ? '<span class="ck-win">+' : '') + m.netExpect.toFixed(2) + ' 元' + (m.netExpect >= 0 ? '</span>' : '') + '</td>' +
+          '<td>' + zTxt + '</td></tr>';
+      });
+      html += '<tr style="background:var(--table-head);"><td style="font-weight:600;">纯随机基准</td><td>' + base.frontAvg.toFixed(3) + ' · ' + base.backAvg.toFixed(3) +
+        '</td><td>' + pct(base.frontHit1, 1) + '</td><td>' + pct(base.winRate, 1) + '</td><td>' + base.avgPrize.toFixed(2) + ' 元</td><td>' + base.netExpect.toFixed(2) + ' 元</td><td>—</td></tr>';
+      html += '<tr class="tt"><td colspan="7" class="dim" style="text-align:left;">回测样本：' + res.periods + ' 期 × 每期 ' + res.trials + ' 注 = ' + (res.periods * res.trials) +
+        ' 注（固定随机种子 ' + res.seed + '，结果可复现）；每期仅使用该期之前 ≥200 期历史数据；「近半 / 早半」为回测窗口前 / 后半段的中奖率；平均奖金按 2026 新规固定奖基本档估算，一/二等奖浮动不计。样本量有限，小幅偏差属正常波动。点击任意方法行可切换预测方法。</td></tr></tbody>';
       $('btTable').innerHTML = html;
       var h3 = $('btWrap').querySelector('h3');
-      if (h3) h3.textContent = '近 100 期历史回测 · 本次样本 ' + res.periods + ' 期 × ' + res.trials + ' 次（固定种子，可复现）';
+      if (h3) h3.textContent = '历史回测 · 本次样本 ' + res.periods + ' 期 × ' + res.trials + ' 注/期 = ' + (res.periods * res.trials) + ' 注（固定种子 ' + res.seed + '，可复现；🏆 = 中奖率最高方法）';
       btn.disabled = false;
-      toast('回测完成：样本 ' + res.periods + ' 期（每期前 ≥200 期历史数据）', true);
+      toast('回测完成：' + res.periods + ' 期 × ' + res.trials + ' 注（' + (Date.now() - t0) + 'ms）', true);
     }, 30);
   }
 
@@ -1457,16 +1574,23 @@
     // 预测方法
     $('predBar').addEventListener('click', function (ev) {
       var b = ev.target.closest('button[data-m]');
-      if (!b) return;
-      document.querySelectorAll('#predBar button[data-m]').forEach(function (x) {
-        x.classList.remove('btn-primary'); x.classList.add('btn-ghost');
-      });
-      b.classList.remove('btn-ghost'); b.classList.add('btn-primary');
-      predMethod = b.dataset.m;
-      buildPrediction();
+      if (!b || !b.dataset || !b.dataset.m) return;
+      selectPredMethod(b.dataset.m);
     });
     $('btnBacktest').addEventListener('click', runBacktest);
-
+    $('btnBtSeed').addEventListener('click', function () {
+      btSeed = (btSeed * 48271) % 2147483647;
+      if (btSeed < 1) btSeed = 20260101;
+      runBacktest();
+    });
+    $('btTable').addEventListener('click', function (ev) {
+      var tr = ev.target.closest('tr[data-m]');
+      if (!tr || !tr.dataset || !tr.dataset.m) return;
+      var mm = tr.dataset.m;
+      selectPredMethod(mm);
+      toast('已切换预测方法：' + (Core.PRED_METHODS[mm] || {}).name, true);
+    });
+    $('btnPickCheck').addEventListener('click', pickCheckLatest);
     // 记录表
     $('recordTable').addEventListener('click', function (ev) {
       var issueEl = ev.target.closest('.rec-issue');

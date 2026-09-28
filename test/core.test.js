@@ -151,6 +151,37 @@ test('backtest：同种子结果可复现且结构完整', () => {
   assert.ok(a.baseline.frontAvg > 0.7 && a.baseline.frontAvg < 0.72, '随机基准 ≈ 5×5/35');
 });
 
+test('backtest：中奖率 / 奖金 / 显著性 / 分段指标', () => {
+  const rows = buildLongRows(260);
+  const a = Core.backtest(rows, { periods: 40, trials: 5, minHistory: 200, seed: 42, segments: true });
+  // 基准：任一中奖（≥七等奖）概率组合数学精确值，大乐透新规单注 ≈ 6.67%
+  assert.ok(a.baseline.winRate > 0.06 && a.baseline.winRate < 0.075, '随机中奖率应在 6%~7.5% 之间，实际 ' + a.baseline.winRate);
+  assert.ok(a.baseline.avgPrize > 0 && a.baseline.avgPrize < 2, '随机固定奖期望应远低于 2 元成本');
+  assert.ok(a.baseline.netExpect < 0, '随机投注期望净回报应为负');
+  a.methods.forEach((m) => {
+    assert.ok(m.winRate >= 0 && m.winRate <= 1, m.name + ' 中奖率应为 0~1');
+    assert.ok(m.avgPrize >= 0, m.name + ' 平均奖金不应为负');
+    assert.equal(m.netExpect, m.avgPrize - 2, m.name + ' 净回报 = 平均奖金 − 2 元成本');
+    assert.ok(Number.isFinite(m.winZ) && Number.isFinite(m.frontHit1Z), m.name + ' Z 值应为有限数');
+    assert.ok(Array.isArray(m.levelDist), m.name + ' 应有奖级分布');
+    m.levelDist.forEach((lv) => {
+      assert.ok(lv.level >= 1 && lv.level <= 7, m.name + ' 奖级应在 1~7');
+      assert.ok(lv.notes >= 1, m.name + ' 奖级注数至少 1');
+    });
+    // 分段：近半 + 早半样本应等于总样本
+    if (m.segments) {
+      const sr = m.segments.recent, se = m.segments.early;
+      assert.equal(sr.sample + se.sample, m.sample, m.name + ' 近半+早半样本应等于总样本');
+      assert.ok(sr.winRate >= 0 && sr.winRate <= 1);
+      assert.ok(se.winRate >= 0 && se.winRate <= 1);
+    }
+  });
+  // 中奖率与奖级分布自洽：任一奖级注数合计 = 中奖注数
+  const any = a.methods.find((m) => m.method === 'freq');
+  const lvSum = any.levelDist.reduce((acc, lv) => acc + lv.notes, 0);
+  assert.equal(lvSum, Math.round(any.winRate * any.sample), '奖级注数合计应等于中奖注数');
+});
+
 test('predictMethod：可复现、号码合法且不重复', () => {
   const rows = buildLongRows(220);
   const st = Core.buildPredStats(rows);

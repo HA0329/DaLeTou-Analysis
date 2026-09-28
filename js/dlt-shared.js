@@ -21,6 +21,21 @@
   var DRAW_HOUR = 21, DRAW_MINUTE = 25;   // 开奖时间 21:25（21:00 停售）
   var WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
+  // ---------- 2026 新规奖级（9 奖级 → 7 奖级 + 8 亿升级档） ----------
+  // 13 个中奖条件 → 7 个奖级；固定奖基本档 / 奖池 ≥8 亿升级档。
+  // 集中在此一份实现：dlt-check.js（中奖查询）与 dlt-core.js（历史回测）共用，
+  // 避免两处维护同一张奖金表导致口径漂移。
+  var PRIZE_PREFIX = { '5+2': 1, '5+1': 2, '5+0': 3, '4+2': 3, '4+1': 4, '4+0': 5, '3+2': 5, '3+1': 6, '2+2': 6, '3+0': 7, '1+2': 7, '2+1': 7, '0+2': 7 };
+  var PRIZE_BASE = { 3: 5000, 4: 300, 5: 150, 6: 15, 7: 5 };        // 基本档
+  var PRIZE_UP = { 3: 6666, 4: 380, 5: 200, 6: 18, 7: 7 };          // 升级档
+  var PRIZE_NAME = { 1: '一等奖', 2: '二等奖', 3: '三等奖', 4: '四等奖', 5: '五等奖', 6: '六等奖', 7: '七等奖' };
+  var PRIZE_COND = { 1: '5+2', 2: '5+1', 3: '5+0 / 4+2', 4: '4+1', 5: '4+0 / 3+2', 6: '3+1 / 2+2', 7: '3+0 / 1+2 / 2+1 / 0+2' };
+
+  // 单注命中奖级：前区命中 mF 个、后区命中 mB 个 → 奖级 1..7，未中奖返回 0
+  function prizeLevelByHit(mF, mB) { return PRIZE_PREFIX[mF + '+' + mB] || 0; }
+  // 固定奖单注金额（一/二等奖为浮动奖金，返回 0）
+  function prizeFixedMoney(level, upgraded) { return level >= 3 ? (upgraded ? PRIZE_UP[level] : PRIZE_BASE[level]) : 0; }
+
   // ---------- 数字 / 文本格式化 ----------
   function pad2(n) { return n < 10 ? '0' + n : '' + n; }
 
@@ -284,6 +299,9 @@
     FRONT_MAX_PICK: FRONT_MAX_PICK, BACK_MAX_PICK: BACK_MAX_PICK,
     EIGHT_YI: EIGHT_YI, WEEKDAYS: WEEKDAYS, NEW_RULE_DATE: NEW_RULE_DATE,
     DRAW_HOUR: DRAW_HOUR, DRAW_MINUTE: DRAW_MINUTE,
+    PRIZE_PREFIX: PRIZE_PREFIX, PRIZE_BASE: PRIZE_BASE, PRIZE_UP: PRIZE_UP,
+    PRIZE_NAME: PRIZE_NAME, PRIZE_COND: PRIZE_COND,
+    prizeLevelByHit: prizeLevelByHit, prizeFixedMoney: prizeFixedMoney,
     pad2: pad2, esc: esc,
     fmtPct: fmtPct, fmtYi: fmtYi, fmtMoney: fmtMoney, fmtNum: fmtNum,
     fmtDate: fmtDate, weekdayName: weekdayName,
